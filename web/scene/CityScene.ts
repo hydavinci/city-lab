@@ -147,8 +147,10 @@ export class CityScene {
     }, ScreenSpaceEventType.LEFT_CLICK);
     this.removeMoveListener = this.viewer.camera.moveEnd.addEventListener(() => this.scheduleTiles());
     this.removeErrorListener = scene.renderError.addEventListener((_scene: unknown, error: Error) => {
-      this.renderFailure = error;
-      callbacks.onError(`三维渲染失败：${error.message}。请降低画质或刷新页面。`);
+      if (!this.renderFailure || this.renderFailure === this.detail.error) this.renderFailure = error;
+      if (this.renderFailure !== this.detail.error) {
+        callbacks.onError(`三维渲染失败：${this.renderFailure.message}。请降低画质或刷新页面。`);
+      }
     });
     this.readyTimer = setInterval(() => {
       if (this.pending.size || !this.surfacesReady()
@@ -200,6 +202,7 @@ export class CityScene {
       const check = () => {
         if (this.disposed) return cancel();
         if (this.renderFailure) return finish(this.renderFailure);
+        if (this.detail.error) return finish(this.detail.error);
         if (performance.now() - start > 60_000) return finish(new Error('几何资源准备超时，请降低画质或刷新重试。'));
         const ids = includeBuildings ? [...this.wanted] : [];
         if (ids.some((id) => this.failed.has(id))) return finish(new Error('部分建筑分块加载失败，请先重试加载再导出。'));
@@ -434,6 +437,14 @@ export class CityScene {
   }
 
   retry() {
+    if (this.renderFailure) {
+      if (this.renderFailure !== this.detail.error) {
+        this.callbacks.onError(`三维渲染失败：${this.renderFailure.message}。请降低画质或刷新页面。`);
+        return;
+      }
+      this.renderFailure = null;
+      this.viewer.useDefaultRenderLoop = true;
+    }
     this.failed.clear();
     this.detail.retry();
     this.scheduleTiles();
@@ -476,6 +487,7 @@ export class CityScene {
   }
 
   async screenshot(): Promise<Blob> {
+    if (this.renderFailure) throw this.renderFailure;
     this.updateTiles();
     await this.detail.waitUntilReady();
     await this.waitForGeometry(true);

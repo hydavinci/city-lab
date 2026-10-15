@@ -34,18 +34,26 @@ export class DetailLayer {
   private failure?: Error;
   private disposed = false;
   private removeRender: () => void;
-  private removeError: () => void;
   private roadAppearance = new MaterialAppearance({ material: colorMaterial('#70756e'), translucent: false, flat: true });
   private accessoryAppearance = new MaterialAppearance({ material: colorMaterial('#85918d'), translucent: false, closed: true });
 
   constructor(private viewer: Viewer, private onError: (message: string) => void) {
     this.collection = viewer.scene.primitives.add(new PrimitiveCollection());
+    // Only the replaceable detail batches belong to this render-error boundary.
+    const collection = this.collection as PrimitiveCollection & { update(frameState: unknown): void };
+    const update = collection.update.bind(collection);
+    collection.update = frameState => {
+      try { update(frameState); }
+      catch (error) { this.fail(error); throw error; }
+    };
     this.removeRender = viewer.scene.postRender.addEventListener(() => this.syncOverview());
-    this.removeError = viewer.scene.renderError.addEventListener((_scene, error) => this.fail(error));
   }
+
+  get error(): Error | undefined { return this.failure; }
 
   get ready(): boolean {
     if (this.failure || this.disposed) return false;
+    if (this.overview?.show && !this.overview.ready) return false;
     for (let i=0;i<this.collection.length;i++) {
       const p = this.collection.get(i) as Primitive;
       if (p.show && !p.ready) return false;
@@ -56,7 +64,7 @@ export class DetailLayer {
   setRoads(collection: FeatureCollection): void {
     if (this.disposed) return;
     for (const region of this.roadRegions.values()) this.unloadRoad(region);
-    if (this.overview) this.collection.remove(this.overview);
+    if (this.overview) this.viewer.scene.primitives.remove(this.overview);
     this.overview = undefined;
     this.roadRegions.clear();
     this.diagnostics = [];
@@ -98,7 +106,7 @@ export class DetailLayer {
       }
     }
     // One overview draw batch, independently switchable by region through per-instance attributes.
-    if (instances.length) this.overview = this.collection.add(new Primitive({
+    if (instances.length) this.overview = this.viewer.scene.primitives.add(new Primitive({
       geometryInstances: instances,
       appearance: new PolylineMaterialAppearance({material:Material.fromType('Color',{color:Color.fromCssColorString('#8f907c')})}),
     }));
@@ -270,14 +278,16 @@ export class DetailLayer {
   }
 
   resourceCounts(): {primitives:number;models:number;cacheEntries:number} {
-    return {primitives:this.disposed ? 0 : this.collection.length,models:0,cacheEntries:this.tiles.size+this.loadedIds.size};
+    return {primitives:this.disposed ? 0 : this.collection.length+Number(Boolean(this.overview)),
+      models:0,cacheEntries:this.tiles.size+this.loadedIds.size};
   }
 
   destroy(): void {
     if (this.disposed) return;
     this.disposed=true;
-    this.removeRender(); this.removeError();
+    this.removeRender();
     this.viewer.scene.primitives.remove(this.collection);
+    if (this.overview) this.viewer.scene.primitives.remove(this.overview);
     this.tiles.clear(); this.roadRegions.clear(); this.loadedIds.clear(); this.diagnostics=[];
     this.overview=undefined;
   }
