@@ -12,6 +12,7 @@
     "test:e2e": "playwright test",
     "data:fetch": "tsx pipeline/fetch.ts",
     "data:enhancements:fetch": "tsx pipeline/enhancements/fetch.ts",
+    "data:enhancements:build": "tsx pipeline/enhancements/build.ts",
     "data:build": "tsx pipeline/build.ts"
   },
   "dependencies": {

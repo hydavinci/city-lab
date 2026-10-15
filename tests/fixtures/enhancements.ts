@@ -1,4 +1,5 @@
-import type { EnhancementManifest, Network } from '../../web/core/enhancements';
+import type { EnhancementManifest, Network, XY } from '../../web/core/enhancements';
+import { createHash } from 'node:crypto';
 
 // Synthetic, hand-authored test-local metres. NEVER geographic evidence or OSM downloads.
 export const syntheticSource = {
@@ -66,3 +67,92 @@ export const overpass = {
         { type: 'way', ref: 101, role: 'to' }] },
   ],
 };
+
+// Independent local-metre-to-degree literals; compiler fixtures are never geographic evidence.
+export function routeFixture() {
+  const coordinates: XY[] = [[-300, 0], [0, 0], [300, 0], [0, -300], [0, 300],
+    [-300, 350], [300, 350]];
+  const source = {
+    version: 0.6, osm3s: { timestamp_osm_base: '2026-10-14T00:00:00Z' },
+    elements: [
+      ...coordinates.map(([x, y], i) => ({
+        type: 'node', id: i + 1, lon: x / 111319.49079327358, lat: y / 111319.49079327358,
+      })),
+      { type: 'way', id: 101, nodes: [1, 2, 3], tags: { highway: 'residential', oneway: 'yes', lanes: '4' } },
+      { type: 'way', id: 102, nodes: [4, 2, 5], tags: { highway: 'residential', oneway: 'yes', lanes: '4' } },
+      { type: 'way', id: 103, nodes: [6, 7], tags: { highway: 'footway', width: '2' } },
+    ] as any[],
+  };
+  const selection = {
+    version: 1, baseDataset: '0123456789abcdef', bounds: [-0.004, -0.004, 0.004, 0.004],
+    showcase: { target: [0, 0], heading: 0, pitch: -45, range: 300 },
+    driveWays: source.elements.filter(e => e.type === 'way' && e.id !== 103)
+      .map(e => ({ id: `way/${e.id}`, nodeIds: [...e.nodes], tags: { ...e.tags } })),
+    walkWays: [{ id: 'way/103', nodeIds: [6, 7], tags: { highway: 'footway', width: '2' } }],
+    crossings: [], excludedWays: {}, restrictions: [], diagnostics: [],
+  };
+  return { source, selection };
+}
+
+export function publicationFixture() {
+  const { source, selection } = routeFixture();
+  const ring = (x: number, y: number, width = 1): XY[] =>
+    [[x,y],[x+width,y],[x+width,y+width],[x,y+width],[x,y]];
+  const feature = (id: string, x: number, y: number, layer: string) => ({
+    type: 'Feature', id, properties: { layer, id }, geometry: { type: 'Polygon',
+      coordinates: [ring(x,y,20).map(([x,y]) => [x/111319.49079327358,y/111319.49079327358])] },
+  });
+  const base = { version: 1, dataset: selection.baseDataset, bounds: selection.bounds,
+    osmTimestamp: source.osm3s.timestamp_osm_base, generatedAt: '2026-10-15T00:00:00.000Z',
+    tiles: [{ id: 'fixture', bounds: selection.bounds, count: 1 }] };
+  const document = { asset: { version: '2.0' }, scene: 0, scenes: [{ nodes: [0] }], nodes: [{ mesh: 0 }],
+    meshes: [{ primitives: [{ attributes: { POSITION: 0 } }] }],
+    buffers: [{ byteLength: 36 }], bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: 36 }],
+    accessors: [{ bufferView: 0, componentType: 5126, count: 3, type: 'VEC3',
+      min: [-0.25,0,-0.25], max: [0.25,0.5,0.25] }] };
+  const text = JSON.stringify(document), chunk = Buffer.from(text.padEnd(Math.ceil(text.length/4)*4,' '));
+  const glb = Buffer.alloc(12+8+chunk.length+8+36);
+  glb.writeUInt32LE(0x46546c67,0); glb.writeUInt32LE(2,4); glb.writeUInt32LE(glb.length,8);
+  glb.writeUInt32LE(chunk.length,12); glb.writeUInt32LE(0x4e4f534a,16); chunk.copy(glb,20);
+  const at=20+chunk.length; glb.writeUInt32LE(36,at); glb.writeUInt32LE(0x004e4942,at+4);
+  [-0.25,0,-0.25, 0.25,0,-0.25, -0.25,0.5,0.25].forEach((v,i)=>glb.writeFloatLE(v,at+8+i*4));
+  const assets = ['car-a','car-b','bus','person-a','person-b','tree','lamp','entrance','roof-unit'].map(kind=>({
+    kind, uri: `${kind}.glb`, bytes: glb.length, sha256: createHash('sha256').update(glb).digest('hex'),
+    size: [0.5,0.5,0.5], animation: null,
+  }));
+  const placements = [
+    {asset:'tree',sourceIds:['way/103'],position:[-100,350.7],footprint:[ring(-100.26,350.44,0.52)]},
+    {asset:'lamp',sourceIds:['way/103'],position:[-120,350.7],footprint:[ring(-120.26,350.44,0.52)]},
+    {asset:'entrance',sourceIds:['way/900'],position:[205,205],footprint:[ring(204.5,204.5)]},
+    {asset:'roof-unit',sourceIds:['way/900'],position:[210,210],footprint:[ring(209.5,209.5)]},
+  ].map(p=>({...p,heading:0,inferred:['synthetic fixture only']}));
+  return { source, selection, base, glb, assets, placements,
+    buildings: { type: 'FeatureCollection', features: [feature('way/900',200,200,'buildings')] },
+    surface: { type: 'FeatureCollection', features: [feature('way/901',250,250,'water')] },
+    cache: { response: source, metadata: { bounds: selection.bounds, query: 'synthetic highway fixture',
+      endpoint: 'fixture.invalid', fetchedAt: '2026-10-15T00:00:00.000Z', osmSnapshot: source.osm3s.timestamp_osm_base } } };
+}
+
+export function crossingFixture() {
+  const { source, selection } = routeFixture();
+  const m = 111319.49079327358;
+  for (const id of [6, 7]) source.elements.find(e => e.id === id).lat = 100 / m;
+  source.elements.push(
+    { type: 'node', id: 8, lon: -10 / m, lat: 100 / m },
+    { type: 'node', id: 9, lon: 10 / m, lat: 100 / m },
+    { type: 'node', id: 10, lon: 0, lat: 100 / m, tags: { highway: 'crossing' } },
+    { type: 'way', id: 104, nodes: [8, 10, 9], tags: { highway: 'footway', footway: 'crossing', width: '2' } },
+    { type: 'way', id: 105, nodes: [9, 7], tags: { highway: 'footway', width: '2' } },
+  );
+  source.elements.find(e => e.id === 103).nodes = [6, 8];
+  source.elements.find(e => e.id === 102).nodes = [4, 2, 10, 5];
+  selection.driveWays[1].nodeIds = [4, 2, 10, 5];
+  selection.walkWays = [103, 104, 105].map(id => {
+    const way = source.elements.find(e => e.id === id);
+    return { id: `way/${id}`, nodeIds: [...way.nodes], tags: { ...way.tags } };
+  });
+  return { source, selection: { ...selection, crossings: [{
+    ways: ['way/104'], from: { node: 'node/8', sideRoute: 'way/103' },
+    to: { node: 'node/9', sideRoute: 'way/105' }, crossedRoads: [{ way: 'way/102', node: 'node/10' }],
+  }] } };
+}
