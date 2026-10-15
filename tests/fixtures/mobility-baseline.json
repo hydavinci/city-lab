@@ -1,0 +1,50 @@
+{
+  "capturedAt": "2026-10-15",
+  "baseDataset": "dbbaf1f81d32fc39",
+  "baseCommit": "812b583",
+  "quality": "medium",
+  "viewport": [1600, 900],
+  "dpr": 1,
+  "beforeActors": {
+    "vehicles": "absent in original base",
+    "pedestrians": "absent in original base"
+  },
+  "candidate": {
+    "source": "data/enhancements/staging/candidate.json",
+    "sha256": "0ea9b4127a4f95256feaaa3aad6fe460f51f43d984797bbafab5e476584e7c53",
+    "origin": [120.679, 31.316000000000003],
+    "routeWidths": { "drive": [3], "walk": [2] },
+    "note": "Frozen Task 2 input snapshot; widths are inferred corridor widths, not surveyed dimensions."
+  },
+  "city": {
+    "target": [120.667, 31.316],
+    "heading": 22.91831180523293,
+    "pitch": -25.783100780887047,
+    "range": 1700
+  },
+  "district": {
+    "target": [120.6777, 31.3157],
+    "heading": 20,
+    "pitch": -45,
+    "range": 1100
+  },
+  "actualCamera": {
+    "city": {
+      "position": [-2781913.3279124894, 4692597.824901301, 3295054.796917821],
+      "direction": [0.1077874572331106, -0.8692592473496316, 0.48246266690840695],
+      "up": [-0.43184860860303786, 0.39617748703591044, 0.8102778400113947]
+    },
+    "district": {
+      "position": [-2782918.989217911, 4691649.345452406, 3295626.412100233],
+      "direction": [0.2764182558190498, -0.939966311355858, 0.20014065395620323],
+      "up": [-0.3400081174234758, 0.09913507426541623, 0.9351827185831303]
+    }
+  },
+  "evidenceDirectory": "artifacts/task-3-red-evidence/enhancements-visual-unchan-da6d7-ight-actors-honestly-absent",
+  "pngSha256": {
+    "before-city-day.png": "d27bb9aa8a706b2f8b0c3ef08bda3860fb3a039751088fb8bc0738d7c4ff45b2",
+    "before-city-night.png": "3e630742a5da24a7bfde576e2bc6c90cdaa48df1b8929f7039cb058e62777d35",
+    "before-district-day.png": "9eee7b7241e91078683eebbf3f45c4b1c778a3a93724ba7984f5a5e15f120baf",
+    "before-district-night.png": "1b5dd1da1138ac9d9ffe2605df32629b93bb70e697652826397234c1059334ac"
+  }
+}

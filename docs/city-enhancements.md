@@ -1,8 +1,9 @@
-# 城市增强数据准备与安全路线编译（Tasks 1–2）
+# 城市增强数据准备、安全路线编译与资产切片（Tasks 1–3）
 
 Task 1 准备共享类型、严格解析器和可追溯的金鸡湖候选源数据；
 Task 2 增加米制路线、完整身体扫掠验证、静态容量和原子发布门禁。
-**不是增强功能发布**：已生成 staging 路线，没有创作模型、模拟或 public 增强清单。
+**不是增强功能发布**：已生成 staging 路线及 Task 3 两模型测试切片；
+没有模拟或 public 增强清单。
 原 `CityManifest.version: 1`、基础数据 `dbbaf1f81d32fc39` 和现有浏览功能保持不变。
 
 ## 显式下载
@@ -178,7 +179,7 @@ npm run data:enhancements:build -- \
 `route/1` 与 `route/6` 在真实共享 `node/4227521259` 有相交车身扫掠，
 共用 `zone/0`；不再仅靠行人让行或未激活图边。四个原排除转弯现有安全汽车几何，
 四次 through-only 换街候选仍被排除。完整边、节点、区域和排除原因以候选 provenance 为准。
-该结果待路线门禁复审批准，尚未开始资产制作。
+以上是 Task 2 的路线门禁结果；后续两模型测试切片见下文 Task 3。
 
 ### 完整包与原子门禁
 
@@ -208,7 +209,8 @@ roads 包含每条边的
 不包含本次生成的 manifest 时间。先写唯一 staging 包，再重命名不可变内容目录，
 最后原子替换 manifest；目录锁拒绝并发发布，已有目录必须逐文件字节一致。
 任何验证失败抛异常，CLI 非零退出，旧 manifest 和不可变文件保留。
-当前无真实资产，真实 `--publish` 应失败且不会写 public 增强清单。
+当前没有可发布的完整资产包；Task 3 测试切片不满足该门禁。
+真实 `--publish` 仍应失败且不会写 public 增强清单。
 
 ### 公开标签语义参考（OSM 原始文档）
 
@@ -217,3 +219,54 @@ roads 包含每条边的
 - `https://wiki.openstreetmap.org/wiki/Key:oneway`：方向以源节点顺序为准。
 - `https://wiki.openstreetmap.org/wiki/Tag:highway%3Dcrossing`：crossing 节点与独立步行 way。
 - `https://wiki.openstreetmap.org/wiki/Key:footway`：sidewalk／crossing 的细分。
+
+## Task 3：Blender → Cesium 两模型测试切片
+
+```sh
+/Applications/Blender.app/Contents/MacOS/Blender \
+  --background --factory-startup \
+  --python assets/city/generate.py -- --slice --output public/enhancements/slice
+npm run test:e2e -- tests/e2e/enhancements-visual.spec.ts
+```
+
+只在独立后台 Blender 5.2.2 LTS 进程创作 `car-a` 与 `person-a`，不触碰用户已打开的
+Blender 文件。可编辑源为 `assets/city/city-assets.blend`，原始创作脚本与说明分别为
+`assets/city/generate.py`、`assets/city/SOURCES.md`。没有外部模型、纹理或新增依赖。
+两 GLB 和记录大小／SHA-256／采样边界的 inventory 位于
+`public/enhancements/slice/`，仅供测试加载；不是 `assets.json` 或增强 manifest。
+Task 5 换用最终不可变资产后应移除此测试切片。
+
+在改变任何基础建筑／道路材质或几何前，已拍摄全城中景和选定街区斜视的日／夜基线，
+均为 1600×900、DPR1、medium；保留原基础数据 `dbbaf1f81d32fc39`。
+`tests/fixtures/mobility-baseline.json` 记录原截图哈希、实际相机向量、选择相机、
+候选原点与宽度快照（机动车 3 m、步行 2 m）。原场景没有车人，
+before 证据明确标记为 absent，不替换成别的场景。PNG 放在 Playwright artifacts，
+不进入 public bundle。
+
+测试夹具 `tests/fixtures/mobility.html` 使用实际 `CityScene`／Cesium 模型渲染，
+仅夹具暴露 `window.mobility`，生产应用没有调试全局。
+模型 scale=1、minimumPixelSize=0；加载、渲染就绪和截图均有超时及错误反馈，
+第二个模型失败会清理第一个模型。近景检查的相机下限仅在夹具改为 0.1 m，
+生产相机仍为 100 m。之前空截图能通过矩阵断言的问题已通过真实像素存在性检查防住。
+
+- 汽车在 Cesium 中实测长宽高 **4.400 × 1.800 × 1.450 m**；
+  倒角车身／斜面车舱、深色车窗、四轮、合金轮毂、前后灯可以辨认。
+- 行人中性高度 **1.750 m**，有躯干、头、肩和髋关节枢轴、四肢、手鞋；
+  `Walk` 是 **1.000 秒**循环，四肢反向摆动。运动和停止姿态均检查真实像素及节点矩阵。
+- Blender -Y 前向导出后为 glTF +Z；实际 Cesium 默认轴变换后为模型局部 +X。
+  统一附加 `Rz(π/2 − heading)`（heading 从北顺时针），在实际浏览器分别验证北／东／南／西。
+  详细单矩阵约定及观测方法见 `SOURCES.md`，后续运行时不可再重复补偿 Cesium 内建转换。
+- 测试只驱动模型的 animationTime，城市时钟始终冻结在 `2026-06-21T04:00:00Z`。
+  四个方位、正面／侧面、两次步态和稳定停止截图均保存在测试附件。
+
+**动态包络仍阻止发布：** 25 个 Walk 相位的实际 ENU 顶点并集为
+`[-0.300000005,-0.442156832,-0.000000072]` 至
+`[0.299999997,0.541206006,1.766251033]` m。
+前后跨度约 **0.983363 m**；考虑根节点不在该跨度中心，居中的矩形长度至少需要
+**1.082413 m** 才覆盖这些采样。当前 Task 2 的 **0.6×0.6 m** 行人包络显然不够。
+最低鞋底的采样误差小于 0.000000073 m，但这些帧不构成连续动画安全证明。
+Task 5 必须验证完整动画包络并调整步态或重新编译／验证路线，不能仅凭中性姿态尺寸放行。
+解析器与发布器对动画的原有拒绝门禁没有放宽。
+
+本切片不证明 20 车／30 人持续活动、碰撞安全、最终九模型质量或硬件帧率目标；
+当前仅确认真实模型的视觉、米制尺度、朝向和独立动画时钟。
