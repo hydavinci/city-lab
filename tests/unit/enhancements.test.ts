@@ -6,7 +6,7 @@ import { fetchDistrict } from '../../pipeline/enhancements/fetch';
 import { manifest, network, overpass, routeFixture, publicationFixture, crossingFixture } from '../fixtures/enhancements';
 import type { Polygon2, XY } from '../../web/core/enhancements';
 import { project, unproject, sweptEnvelope, validateEnvelope } from '../../pipeline/enhancements/geometry';
-import { capacity, compileNetwork } from '../../pipeline/enhancements/routes';
+import { activeMotorConflict, capacity, compileNetwork } from '../../pipeline/enhancements/routes';
 import { buildEnhancements } from '../../pipeline/enhancements/build';
 
 vi.mock('node:timers/promises', () => ({ setTimeout: async () => {} }));
@@ -57,7 +57,8 @@ describe('immutable enhancement publication', () => {
     expect(await readFile(join(options.outputDir,first.network))).toEqual(before);
     expect((await readdir(options.outputDir)).sort()).toEqual([first.id,'manifest.json'].sort());
   });
-  it.each(['missing asset','bad hash','invalid GLB','oversized GLB','missing placement','invalid geometry',
+  it.each(['missing asset','bad hash','invalid GLB','oversized GLB','animation declaration',
+    'missing motor conflict','inactive motor conflict','missing placement','invalid geometry',
     'route obstruction','misplaced asset','immutable collision','empty immutable collision'])(
     'preserves the old manifest and immutable bytes after %s failure', async failure => {
       const first=await buildEnhancements(options);
@@ -66,6 +67,22 @@ describe('immutable enhancement publication', () => {
       const target=join(options.outputDir,first.network);
       if(failure==='missing asset') await rm(join(options.assetDir,'car-a.glb'));
       if(failure==='bad hash') await writeFile(join(options.assetDir,'car-a.glb'),'corrupt');
+      if(failure==='animation declaration') {
+        Object.assign(data.assets.find(a=>a.kind==='person-a')!,{animation:'walk'});
+        await writeFile(join(options.assetDir,'assets.json'),JSON.stringify(data.assets));
+      }
+      if(failure==='missing motor conflict') {
+        data.selection.driveWays=data.selection.driveWays.slice(0,1);
+        data.selection.excludedWays={notSelected:['way/102']};
+        await writeFile(options.selectionPath,JSON.stringify(data.selection));
+      }
+      if(failure==='inactive motor conflict') {
+        data.selection.showcase.target=[0,-300/111319.49079327358];
+        Object.assign(data.source.elements.find(e=>e.id===101).tags,{'turn:lanes':'through|through|through|through'});
+        Object.assign(data.selection.driveWays[0].tags,{'turn:lanes':'through|through|through|through'});
+        await writeFile(options.selectionPath,JSON.stringify(data.selection));
+        await writeFile(join(options.rawDir,'district.json'),JSON.stringify(data.cache));
+      }
       if(failure==='invalid GLB') {
         const bytes=Buffer.from(data.glb);bytes.writeUInt32LE(1,4);
         const {createHash}=await import('node:crypto');
@@ -100,7 +117,7 @@ describe('immutable enhancement publication', () => {
         await mkdir(join(options.outputDir,first.id));
       }
       const oldNetwork=failure==='empty immutable collision'?null:await readFile(target);
-      await expect(buildEnhancements(options)).rejects.toThrow();
+      await expect(buildEnhancements(options)).rejects.toThrow(failure.includes('motor conflict')?/active motor intersection conflict/:undefined);
       expect(await readFile(join(options.outputDir,'manifest.json'))).toEqual(oldManifest);
       if(oldNetwork) expect(await readFile(target)).toEqual(oldNetwork);
       else expect(await readdir(join(options.outputDir,first.id))).toEqual([]);
@@ -140,6 +157,7 @@ const manifestMutations: [string, (m: any) => void][] = [
   ['size arity', m => { m.assets[0].size = [1, 2]; }],
   ['nonfinite size', m => { m.assets[0].size[2] = Infinity; }],
   ['animation type', m => { m.assets[0].animation = 4; }],
+  ['unsupported animation declaration', m => { m.assets[0].animation = 'walk'; }],
 ];
 it.each(manifestMutations)('rejects manifest %s', (_, mutate) => {
   const value = structuredClone(manifest); mutate(value);
@@ -308,7 +326,16 @@ describe('explicit district preparation cache', () => {
           expect(Math.hypot(e.points[i][0]-e.points[i-1][0], e.points[i][1]-e.points[i-1][1])).toBeLessThanOrEqual(0.250001);
         }
         expect(n.zones.some(z => z.edges.filter(id => n.edges.find(e => e.id === id)?.mode === 'drive').length >= 2)).toBe(true);
+        expect(activeMotorConflict(n)?.node).toBe('node/2');
         expect(n.routes.some(r => r.mode === 'walk')).toBe(true);
+      });
+      it('does not count parallel motor lanes sharing a conservative zone as an intersection', () => {
+        const a={...network.edges[0],id:'a',from:'a0',to:'a1',sourceIds:['way/101','node/2'],
+          points:[[-10,0],[10,0]] as XY[],length:20,next:[],conflicts:[{zone:'z',enter:0,exit:20}]};
+        const b={...a,id:'b',from:'b0',to:'b1',sourceIds:['way/102','node/2'],points:[[-10,4],[10,4]] as XY[]};
+        const n={...network,edges:[a,b],routes:[a,b].map(e=>({...network.routes[0],id:e.id,edges:[e.id],entry:e.id,exit:e.id})),
+          zones:[{id:'z',edges:['a','b'],polygon:[[[-20,-20],[20,-20],[20,20],[-20,20],[-20,-20]]] as Polygon2}]};
+        expect(activeMotorConflict(parseNetwork(n))).toBeUndefined();
       });
       it('does not join mere XY intersections with different source node IDs', () => {
         const { source, selection } = routeFixture();
@@ -317,6 +344,7 @@ describe('explicit district preparation cache', () => {
         selection.driveWays[1].nodeIds = [4,8,5];
         const { network: n } = compileNetwork(source, selection, [], []);
         expect(n.edges.some(e => e.id.startsWith('turn/') && e.sourceIds.includes('way/101') && e.sourceIds.includes('way/102'))).toBe(false);
+        expect(activeMotorConflict(n)).toBeUndefined();
       });
       it('excludes a walking path crossing driving geometry without sourced crossing evidence', () => {
         const { source, selection } = routeFixture();
@@ -369,6 +397,19 @@ describe('explicit district preparation cache', () => {
         expect(capacity(n).pedestrians).toBeGreaterThanOrEqual(30);
         expect(n.zones.every(z=>Math.max(...z.polygon[0].map(p=>Math.abs(p[0])))<50)).toBe(true);
       });
+      it('uses available short junction-link space for a safe car turn without admitting a bus', () => {
+        const {source,selection}=routeFixture(), m=111319.49079327358;
+        source.elements.push({type:'node',id:8,lon:-23/m,lat:0},{type:'node',id:9,lon:0,lat:16.5/m});
+        source.elements.find(e=>e.id===101).nodes=selection.driveWays[0].nodeIds=[1,8,2,3];
+        source.elements.find(e=>e.id===102).nodes=selection.driveWays[1].nodeIds=[4,2,9,5];
+        const n=compileNetwork(source,selection,[],[]).network;
+        const route=n.routes.find(r=>r.entry.includes('way/101') && r.exit.includes('way/102'));
+        expect(route?.allowed).toEqual(['car-a','car-b']);
+        const turn=n.edges.find(e=>e.id==='turn/drive/way/101/8-2/drive/way/102/2-9')!;
+        expect(turn).toBeDefined();
+        expect(turn.points.slice(1).every((p,i)=>Math.hypot(p[0]-turn.points[i][0],p[1]-turn.points[i][1])<=0.25)).toBe(true);
+        expect(turn.conflicts.length).toBeGreaterThan(0);
+      });
       it('counts contiguous storage without losing endpoint margins at every source node', () => {
         const {source,selection}=routeFixture();
         const n=compileNetwork(source,selection,[],[]).network;
@@ -399,6 +440,23 @@ describe('explicit district preparation cache', () => {
           expect(result.network.edges.some(e => e.sourceIds.includes('way/103'))).toBe(false);
           expect(result.diagnostics.some(d => d.sourceIds.includes('way/103'))).toBe(true);
         });
+      it.each([
+        ...['access','vehicle','motor_vehicle','motorcar','bus','psv'].flatMap(key=>
+          ['conditional','forward','backward'].map(variant=>({node:2,ways:['way/101','way/102'],key:`${key}:${variant}`}))),
+        ...['access','foot'].flatMap(key=>
+          ['conditional','forward','backward'].map(variant=>({node:6,ways:['way/103'],key:`${key}:${variant}`}))),
+      ])('excludes source-node permission $key before creating incident ways (node $node)', ({node,ways,key}) => {
+        const {source,selection}=routeFixture();
+        source.elements.find(e=>e.type==='node' && e.id===node).tags={
+          [key]:key.endsWith('conditional')?'no @ (Mo-Su)':'no',
+        };
+        const result=compileNetwork(source,selection,[],[]);
+        for(const way of ways) {
+          expect(result.network.edges.some(e=>e.sourceIds.includes(way))).toBe(false);
+          expect(result.diagnostics.some(d=>d.code==='EXCLUDED_WAY' && d.sourceIds.includes(way))).toBe(true);
+        }
+        expect(result.network.routes.length).toBeGreaterThan(0);
+      });
       it('honours reverse oneway, parses mph, and never infers a missing sidewalk', () => {
         const { source, selection } = routeFixture();
         Object.assign(source.elements.find(e => e.id === 101).tags, {oneway:'-1', maxspeed:'10 mph'});

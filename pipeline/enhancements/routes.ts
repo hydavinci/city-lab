@@ -167,6 +167,8 @@ export function compileNetwork(source: unknown, selection: unknown, buildings: P
         if(prohibitions.some(k=>t[k] && !['yes','designated','permissive'].includes(t[k]))) fail('Access prohibited/unsupported');
         if(w.nodeIds.some(id=>prohibitions.some(k=>nodes.get(id)!.tags?.[k] && !['yes','designated','permissive'].includes(nodes.get(id)!.tags![k]))
           || nodes.get(id)!.tags?.barrier && nodes.get(id)!.tags?.barrier!=='no')) fail('Node access/barrier unsupported');
+        if(w.nodeIds.some(id=>Object.keys(nodes.get(id)!.tags??{}).some(k=>
+          k.includes('conditional')||prohibitions.some(p=>k.startsWith(`${p}:`))))) fail('Unsupported node directional/conditional access');
         if(mode==='drive' && !['primary','secondary','tertiary','residential','unclassified','service','living_street','primary_link','secondary_link','tertiary_link'].includes(t.highway)) fail('Not a driving road');
         if(mode==='walk' && !['footway','path','pedestrian'].includes(t.highway))
           fail('No independent footway geometry; tagged sidewalks are not centreline walking routes');
@@ -205,7 +207,9 @@ export function compileNetwork(source: unknown, selection: unknown, buildings: P
             if(mode==='drive') roadSources.push({way:w.id,nodes:[na.id,nb.id],polygon:raw});
             const terminalStart=lo>0 || i===1 && counts.get(ordered[0])===1;
             const terminalEnd=hi<1 || i===ordered.length-1 && counts.get(ordered.at(-1)!)===1;
-            const trim=Math.min(mode==='drive'?10:1,len*0.3);
+            // Use available short junction-link space for turns, retaining a nonzero middle segment.
+            const junction=mode==='drive' && (counts.get(na.id)!>1 || counts.get(nb.id)!>1);
+            const trim=Math.min(mode==='drive'?10:1,len*(junction?0.45:0.3));
             const shifted=(p:XY):XY=>[p[0]+u[1]*offset,p[1]-u[0]*offset];
             const points=[shifted(lerp(a,b,trim/len)),shifted(lerp(a,b,1-trim/len))];
             const id=`${mode}/${w.id}/${ordered[i-1]}-${ordered[i]}`;
@@ -387,6 +391,25 @@ function addConflicts(n: Network): void {
       if(exit>enter) { e.conflicts.push({zone:z.id,enter,exit:Math.min(exit,e.length)});z.edges.push(e.id); }
     }
     if(z.edges.length) n.zones.push(z);
+  }
+}
+
+export function activeMotorConflict(n: Network): {routes:string[];edges:string[];node:string;zone:string}|undefined {
+  const routes=n.routes.filter(r=>r.mode==='drive'), edges=new Map(n.edges.map(e=>[e.id,e]));
+  for(let i=0;i<routes.length;i++) for(let j=i+1;j<routes.length;j++) {
+    const a=routes[i],b=routes[j];
+    for(const aid of a.edges) for(const bid of b.edges) {
+      if(b.edges.includes(aid) || a.edges.includes(bid)) continue;
+      const x=edges.get(aid)!,y=edges.get(bid)!;
+      // Following, diverging and merging on one approach are not a crossing demonstration.
+      if(x.from===y.from || x.to===y.to) continue;
+      const node=x.sourceIds.find(id=>id.startsWith('node/') && y.sourceIds.includes(id));
+      const zone=x.conflicts.find(c=>y.conflicts.some(d=>c.zone===d.zone))?.zone;
+      if(!node || !zone) continue;
+      const xs=sweptEnvelope(x.points,Math.max(...a.allowed.map(k=>ACTORS[k].length)),Math.max(...a.allowed.map(k=>ACTORS[k].width)));
+      const ys=sweptEnvelope(y.points,Math.max(...b.allowed.map(k=>ACTORS[k].length)),Math.max(...b.allowed.map(k=>ACTORS[k].width)));
+      if(xs.some(p=>ys.some(q=>polygonsIntersect(p,q)))) return {routes:[a.id,b.id],edges:[aid,bid],node,zone};
+    }
   }
 }
 

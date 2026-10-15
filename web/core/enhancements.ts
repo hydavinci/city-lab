@@ -204,7 +204,7 @@ export function parseEnhancementManifest(value: unknown, baseDataset: string): E
     check(typeof asset.sha256 === 'string' && /^[a-f0-9]{64}$/.test(asset.sha256), 'invalid SHA-256');
     positive(asset.bytes); check(Number.isSafeInteger(asset.bytes), 'invalid byte count');
     tuple(asset.size, 3); asset.size.forEach(positive);
-    if (asset.animation !== null) text(asset.animation);
+    check(asset.animation === null, 'animation declaration requires a validated runtime bounds/clip adapter');
   }
   object(m.showcase); geographic(m.showcase.target);
   finite(m.showcase.heading); finite(m.showcase.pitch); positive(m.showcase.range);

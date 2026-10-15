@@ -6,7 +6,7 @@ import type { FeatureCollection } from 'geojson';
 import { parseEnhancementManifest, parseNetwork } from '../../web/core/enhancements';
 import type { Asset, Diagnostic, EnhancementManifest, Network, Polygon2, XY } from '../../web/core/enhancements';
 import type { CityManifest } from '../../web/core/types';
-import { ACTORS, capacity, compileNetwork, parseSelection } from './routes';
+import { ACTORS, activeMotorConflict, capacity, compileNetwork, parseSelection } from './routes';
 import { boundsOverlap, polygonBounds, polygonsIntersect, project, rectangle, sweptEnvelope, validateEnvelope } from './geometry';
 
 const json = (value: unknown) => Buffer.from(JSON.stringify(value));
@@ -186,6 +186,9 @@ export async function buildEnhancements(options: {
   const { network, diagnostics } = compileNetwork(cache.response, selection, buildings, water);
   const storage = capacity(network);
   diagnostics.push({ sourceIds: [], code: 'STATIC_CAPACITY', message: JSON.stringify(storage) });
+  const motorConflict = activeMotorConflict(network);
+  diagnostics.push({ sourceIds: motorConflict ? [motorConflict.node] : [], code: 'ACTIVE_MOTOR_CONFLICT',
+    message: JSON.stringify(motorConflict ?? null) });
   const roads = { version: 1, origin: network.origin, bounds: network.bounds,
     features: network.edges.map(e => ({ id: e.id, sourceIds: e.sourceIds, mode: e.mode, corridor: e.corridor })) };
   const provenance = { version: 1, baseDataset: base.dataset, source: cache, selection,
@@ -197,6 +200,7 @@ export async function buildEnhancements(options: {
     return { candidate: network, diagnostics };
   }
   check(storage.vehicles >= 20 && storage.pedestrians >= 30, 'Insufficient validated capacity: requires 20 vehicles and 30 pedestrians');
+  check(motorConflict, 'Missing active motor intersection conflict through a shared source node and physical zone');
   const assets: Asset[] = await readJSON(join(assetDir, 'assets.json'));
   const probe = parseEnhancementManifest({ version: 1, id: 'candidate', baseDataset: base.dataset,
     generatedAt: new Date().toISOString(), bounds: selection.bounds, showcase: selection.showcase,
