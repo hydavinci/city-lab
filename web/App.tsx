@@ -314,7 +314,7 @@ export function App() {
     {help && <div className="modal-backdrop" onClick={() => setHelp(false)}><section className="help-dialog" role="dialog" aria-modal="true" aria-labelledby="help-heading" onClick={(event) => event.stopPropagation()}>
       <button className="icon-button close-dialog" aria-label="关闭操作指南" onClick={() => setHelp(false)}><X size={18} /></button>
       <Navigation size={24} className="color-mint" /><h2 id="help-heading">从全域，到一条水巷。</h2>
-      <p>点击“城市漫游”中的地点，进入倾斜三维视角。用鼠标滚轮靠近城市，中键拖动环绕，单击建筑查看来源和高度依据。接近水平时保留安全俯角，向上拖动可回到俯视。</p>
+      <p>点击“城市漫游”中的地点，进入倾斜三维视角。用鼠标滚轮靠近城市，中键拖动环绕，单击建筑查看来源和高度依据。接近水平时保留安全俯角，向下拖动可回到俯视。</p>
       <p>建筑仅按当前视角加载有限分块。远景隐藏建筑，不代表该区域没有数据。此版本基于 OSM 轮廓拉伸，不是照片级苏州实景。</p>
       <button className="button primary" onClick={() => setHelp(false)}>开始探索 <ArrowUpRight size={15} /></button>
     </section></div>}

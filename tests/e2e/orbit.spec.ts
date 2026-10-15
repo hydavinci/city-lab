@@ -22,7 +22,7 @@ async function pose(page: Page) {
   });
 }
 
-async function drag(page: Page, from: [number, number], to: [number, number], button: 'left' | 'middle' = 'middle') {
+async function drag(page: Page, from: [number, number], to: [number, number], button: 'left' | 'middle' | 'right' = 'middle') {
   await page.mouse.move(...from);
   await page.mouse.down({ button });
   for (let step = 1; step <= 12; step++) {
@@ -34,6 +34,40 @@ async function drag(page: Page, from: [number, number], to: [number, number], bu
 
 function distance(a: number[], b: number[]) {
   return Math.hypot(...a.map((n, index) => n - b[index]));
+}
+
+for (const button of ['middle', 'left', 'right'] as const) {
+  const binding = button === 'middle' ? 'middle' : `Ctrl+${button}`;
+
+  test(`${binding} orbit turns right on a rightward drag and left on a leftward drag`, async ({ page }) => {
+    await openCity(page);
+    if (button !== 'middle') await page.keyboard.down('Control');
+    const before = await pose(page);
+    await drag(page, [450, 300], [540, 300], button);
+    const right = await pose(page);
+    const headingChange = ((right.heading - before.heading + 540) % 360) - 180;
+    expect(headingChange).toBeGreaterThan(10);
+    await drag(page, [540, 300], [450, 300], button);
+    const left = await pose(page);
+    expect(Math.abs(((left.heading - before.heading + 540) % 360) - 180)).toBeLessThan(1);
+    expect(left.inputs).toBe(true);
+    if (button !== 'middle') await page.keyboard.up('Control');
+  });
+
+  test(`${binding} orbit tilts toward the horizon on an upward drag and overhead on a downward drag`, async ({ page }) => {
+    await openCity(page);
+    if (button !== 'middle') await page.keyboard.down('Control');
+    const before = await pose(page);
+    await drag(page, [450, 300], [450, 260], button);
+    const up = await pose(page);
+    expect(up.pitch).toBeGreaterThan(before.pitch + 5);
+    await drag(page, [450, 260], [450, 300], button);
+    const down = await pose(page);
+    expect(down.pitch).toBeLessThan(up.pitch - 5);
+    expect(down.pitch).toBeCloseTo(before.pitch, 0);
+    expect(down.inputs).toBe(true);
+    if (button !== 'middle') await page.keyboard.up('Control');
+  });
 }
 
 test('a horizontal view still orbits around the city instead of only changing look direction', async ({ page }) => {
@@ -48,19 +82,19 @@ test('a horizontal view still orbits around the city instead of only changing lo
   const after = await pose(page);
   expect(distance(before.position, after.position)).toBeGreaterThan(10);
   expect(after.pitch).toBeLessThan(-2);
-  await drag(page, [450, 350], [450, 180]);
+  await drag(page, [450, 180], [450, 350]);
   expect((await pose(page)).pitch).toBeLessThan(-40);
 });
 
 test('repeated horizon tilts remain above ground and can be reversed without resetting', async ({ page }) => {
   await openCity(page);
-  for (let i = 0; i < 3; i++) await drag(page, [450, 170], [450, 540]);
+  for (let i = 0; i < 3; i++) await drag(page, [450, 540], [450, 170]);
   const horizontal = await pose(page);
   expect(horizontal.pitch).toBeLessThanOrEqual(-4.9);
   expect(horizontal.height).toBeGreaterThanOrEqual(99.9);
   await drag(page, [450, 180], [650, 180]);
   expect(distance(horizontal.position, (await pose(page)).position)).toBeGreaterThan(10);
-  await drag(page, [450, 400], [450, 100]);
+  await drag(page, [450, 100], [450, 400]);
   const restored = await pose(page);
   expect(restored.pitch).toBeLessThan(-40);
   expect(restored.inputs).toBe(true);
@@ -85,7 +119,7 @@ test('tilting from the full-city overhead view does not introduce a sideways hea
   await openCity(page);
   await page.evaluate(() => window.clarity.scene.home(0));
   const before = await pose(page);
-  await drag(page, [450, 250], [450, 280]);
+  await drag(page, [450, 280], [450, 250]);
   const after = await pose(page);
   const headingChange = Math.abs(((after.heading - before.heading + 540) % 360) - 180);
   expect(headingChange).toBeLessThan(1);
