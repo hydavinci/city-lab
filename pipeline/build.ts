@@ -8,6 +8,21 @@ import { geometryBounds, tileId, tileBounds } from '../web/core/geo';
 import type { BuildingFeature, CityManifest, TileInfo } from '../web/core/types';
 import { normalizeBuildings, validateOverpass } from './normalize';
 
+function roadWidth(tags: Record<string, unknown>): { widthMetres: number; widthBasis: string } {
+  const match = /^(\d+(?:\.\d+)?)\s*(m|ft|')?$/i.exec(String(tags.width ?? '').trim());
+  if (match) {
+    const width = Number(match[1]) * (match[2] && match[2].toLowerCase() !== 'm' ? 0.3048 : 1);
+    if (width >= 0.5 && width <= 80) return { widthMetres: width, widthBasis: 'source:width' };
+  }
+  const lanes = Number(tags.lanes);
+  if (Number.isInteger(lanes) && lanes > 0 && lanes <= 12) {
+    return { widthMetres: lanes * 3.2, widthBasis: 'inferred:lanes*3.2m' };
+  }
+  const kind = String(tags.highway);
+  const widths: Record<string, number> = { motorway: 14, trunk: 14, primary: 10.5, secondary: 7, tertiary: 6, residential: 6, service: 4 };
+  return { widthMetres: widths[kind] ?? 6, widthBasis: `inferred:highway:${kind}` };
+}
+
 async function atomicJSON(path: string, value: unknown) {
   const temporary = `${path}.${process.pid}.tmp`;
   await writeFile(temporary, JSON.stringify(value));
@@ -47,7 +62,10 @@ export async function buildDataset({ rawDir, outputDir }: { rawDir: string; outp
     counts[layer]++;
     surfaceFeatures.push({
       type: 'Feature', id: feature.id, geometry: feature.geometry,
-      properties: { layer, name: tags.name ?? '', kind: tags.highway ?? tags.waterway ?? tags.natural ?? tags.landuse ?? tags.leisure },
+      properties: {
+        layer, name: tags.name ?? '', kind: tags.highway ?? tags.waterway ?? tags.natural ?? tags.landuse ?? tags.leisure,
+        ...(layer === 'roads' ? { sourceTags: { ...tags }, ...roadWidth(tags) } : {}),
+      },
     });
   }
   for (const layer of ['roads', 'water', 'green'] as const) {
@@ -62,7 +80,7 @@ export async function buildDataset({ rawDir, outputDir }: { rawDir: string; outp
     group.push(feature);
     groups.set(id, group);
   }
-  const hash = createHash('sha256').update('schema-v1-height-v1-buildings-v2-surface-v1');
+  const hash = createHash('sha256').update('schema-v1-height-v1-buildings-v2-surface-v2-metre-roads');
   for (const text of raw) hash.update(text);
   const dataset = hash.digest('hex').slice(0, 16);
   const directory = join(outputDir, dataset);

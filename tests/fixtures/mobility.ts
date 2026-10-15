@@ -1,6 +1,6 @@
 import {
   BoundingSphere, Cartesian3, Color, HeadingPitchRange, JulianDate, Matrix3, Matrix4,
-  Model, ModelAnimationLoop, Transforms,
+  Model, ModelAnimationLoop, Transforms, CorridorGeometry,
 } from 'cesium';
 import { CityScene, fetchJSON } from '../../web/scene/CityScene';
 import { defaultSettings } from '../../web/core/settings';
@@ -24,6 +24,8 @@ declare global {
   interface Window {
     mobility: {
       scene: CityScene; ready: Promise<void>; errors: string[];
+      geometry: { Cartesian3: typeof Cartesian3; Matrix4: typeof Matrix4; Transforms: typeof Transforms;
+        CorridorGeometry: typeof CorridorGeometry; HeadingPitchRange: typeof HeadingPitchRange };
       assetViews(): Promise<void>;
       capture(name: string): Promise<Blob>;
       baseline(view: 'city' | 'district', night: boolean): Promise<unknown>;
@@ -225,6 +227,7 @@ async function view(kind: Kind, heading: number, side = false): Promise<void> {
 }
 
 window.mobility = {
+  geometry: { Cartesian3, Matrix4, Transforms, CorridorGeometry, HeadingPitchRange },
   scene, errors, ready: bounded(scene.initialize(), 'base city initialization', 65_000),
   assetViews: async () => {
     try { await assetViews(); }

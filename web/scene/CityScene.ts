@@ -6,10 +6,12 @@ import {
   HeadingPitchRange, BoundingSphere, JulianDate, EllipsoidTerrainProvider, SceneMode,
 } from 'cesium';
 import type { FeatureCollection, Geometry, Position } from 'geojson';
-import type { Bounds, BuildingProperties, CityManifest, SceneSettings, SceneStats } from '../core/types';
+import type { Bounds, BuildingFeature, BuildingProperties, CityManifest, SceneSettings, SceneStats } from '../core/types';
 import { selectTiles } from '../core/geo';
+import { buildingArea, facadeKind, facadeKinds, type FacadeKind } from '../core/detail';
 import { buildingMaterial, colorMaterial, facadeVertexShader } from './materials';
 import { OrbitControls } from './OrbitControls';
+import { DetailLayer } from './DetailLayer';
 
 export const PLACES = [
   { name: '金鸡湖', sub: '湖畔新城', lng: 120.695, lat: 31.317, range: 6500 },
@@ -29,7 +31,7 @@ interface Callbacks {
   onSelect: (building: BuildingProperties | null) => void;
   onError: (message: string) => void;
 }
-interface TileEntry { primitive: Primitive; count: number }
+interface TileEntry { primitives: Primitive[]; count: number }
 type Layer = 'water' | 'roads' | 'green' | 'boundary';
 
 function ringsOf(geometry: Geometry): Position[][][] {
@@ -63,7 +65,8 @@ export class CityScene {
   private pending = new Map<string, AbortController>();
   private failed = new Set<string>();
   private wanted = new Set<string>();
-  private buildingAppearance: MaterialAppearance;
+  private buildingAppearances: Record<FacadeKind, MaterialAppearance>;
+  private detail: DetailLayer;
   private handler: ScreenSpaceEventHandler;
   private orbit: OrbitControls;
   private disposed = false;
@@ -123,11 +126,12 @@ export class CityScene {
         distanceDisplayCondition: new DistanceDisplayCondition(2500, 400_000),
       });
     }
-    this.buildingAppearance = new MaterialAppearance({
-      material: buildingMaterial(settings.night, settings.glow),
+    this.buildingAppearances = Object.fromEntries(facadeKinds.map(kind=>[kind,new MaterialAppearance({
+      material: buildingMaterial(settings.night, settings.glow, kind),
       vertexShaderSource: facadeVertexShader,
       translucent: false, closed: true, faceForward: true,
-    });
+    })])) as Record<FacadeKind, MaterialAppearance>;
+    this.detail = new DetailLayer(this.viewer, callbacks.onError);
     this.handler = new ScreenSpaceEventHandler(scene.canvas);
     this.handler.setInputAction((event: { position: Cartesian2 }) => {
       const picked: unknown = scene.pick(event.position);
@@ -148,7 +152,7 @@ export class CityScene {
     });
     this.readyTimer = setInterval(() => {
       if (this.pending.size || !this.surfacesReady()
-        || [...this.tiles.values()].some((tile) => !tile.primitive.ready)) scene.requestRender();
+        || [...this.tiles.values()].some((tile) => tile.primitives.some(p=>!p.ready))) scene.requestRender();
       this.report();
     }, 200);
     this.orbit = new OrbitControls(this.viewer);
@@ -172,7 +176,7 @@ export class CityScene {
   }
 
   private surfacesReady(): boolean {
-    return Object.values(this.layers).every((layer) => {
+    return this.detail.ready && Object.values(this.layers).every((layer) => {
       if (!layer.show) return true;
       for (let i = 0; i < layer.length; i++) {
         if (!(layer.get(i) as Primitive).ready) return false;
@@ -199,7 +203,7 @@ export class CityScene {
         if (performance.now() - start > 60_000) return finish(new Error('几何资源准备超时，请降低画质或刷新重试。'));
         const ids = includeBuildings ? [...this.wanted] : [];
         if (ids.some((id) => this.failed.has(id))) return finish(new Error('部分建筑分块加载失败，请先重试加载再导出。'));
-        if (this.surfacesReady() && ids.every((id) => this.tiles.get(id)?.primitive.ready)) return finish();
+        if (this.surfacesReady() && ids.every((id) => this.tiles.get(id)?.primitives.every(p=>p.ready))) return finish();
         this.viewer.scene.requestRender();
         timer = setTimeout(check, 100);
       };
@@ -232,7 +236,8 @@ export class CityScene {
 
   private addSurface(collection: FeatureCollection) {
     const polygons: Record<'water' | 'green', GeometryInstance[]> = { water: [], green: [] };
-    const roadLines: GeometryInstance[] = [], waterLines: GeometryInstance[] = [];
+    const waterLines: GeometryInstance[] = [];
+    this.detail.setRoads(collection);
     for (const feature of collection.features) {
       const layer: unknown = feature.properties?.layer;
       if (layer === 'water' || layer === 'green') {
@@ -249,14 +254,13 @@ export class CityScene {
       const geometry = feature.geometry;
       const lines = geometry.type === 'LineString' ? [geometry.coordinates]
         : geometry.type === 'MultiLineString' ? geometry.coordinates : [];
-      if (layer === 'roads' || layer === 'water') {
+      if (layer === 'water') {
         for (const line of lines) {
           if (line.length < 2) continue;
-          const target = layer === 'roads' ? roadLines : waterLines;
-          target.push(new GeometryInstance({
+          waterLines.push(new GeometryInstance({
             geometry: new PolylineGeometry({
-              positions: Cartesian3.fromDegreesArrayHeights(line.flatMap(([x, y]) => [x, y, layer === 'roads' ? 5 : 3])),
-              width: layer === 'water' ? 2 : /motorway|trunk/.test(feature.properties?.kind) ? 2 : 1,
+              positions: Cartesian3.fromDegreesArrayHeights(line.flatMap(([x, y]) => [x, y, 3])),
+              width: 2,
               vertexFormat: PolylineMaterialAppearance.VERTEX_FORMAT,
             }),
           }));
@@ -272,12 +276,6 @@ export class CityScene {
         }),
       }));
     }
-    if (roadLines.length) this.layers.roads.add(new Primitive({
-      geometryInstances: roadLines,
-      appearance: new PolylineMaterialAppearance({
-        material: Material.fromType('Color', { color: Color.fromCssColorString('#ac9464') }),
-      }),
-    }));
     if (waterLines.length) this.layers.water.add(new Primitive({
       geometryInstances: waterLines,
       appearance: new PolylineMaterialAppearance({
@@ -292,9 +290,10 @@ export class CityScene {
     const scene = this.viewer.scene;
     scene.backgroundColor = Color.fromCssColorString(settings.night ? '#080e17' : '#c4d6df');
     scene.globe.baseColor = Color.fromCssColorString(settings.night ? '#101e23' : '#c1cbbc');
-    const material = this.buildingAppearance.material;
-    material.uniforms.nightMode = settings.night ? 1 : 0;
-    material.uniforms.glow = settings.glow;
+    for (const appearance of Object.values(this.buildingAppearances)) {
+      appearance.material.uniforms.nightMode = settings.night ? 1 : 0;
+      appearance.material.uniforms.glow = settings.glow;
+    }
     const bloom = scene.postProcessStages.bloom;
     bloom.enabled = settings.night && settings.quality !== 'low' && settings.glow > 0;
     bloom.uniforms.glowOnly = false;
@@ -327,7 +326,8 @@ export class CityScene {
       if (appearance?.material) appearance.material.uniforms.color = Color.fromCssColorString(settings.night ? '#817963' : '#8f907c');
     }
     this.labels.show = settings.labels;
-    for (const tile of this.tiles.values()) tile.primitive.show = settings.buildings;
+    for (const tile of this.tiles.values()) for (const p of tile.primitives) p.show = settings.buildings;
+    this.detail.update(settings);
     this.scheduleTiles();
     scene.requestRender();
   }
@@ -340,6 +340,7 @@ export class CityScene {
   private updateTiles() {
     if (this.disposed) return;
     const viewer = this.viewer;
+    this.detail.update(this.settings);
     const altitude = viewer.camera.positionCartographic.height;
     this.overview = altitude > 24000;
     const view = viewer.camera.computeViewRectangle();
@@ -358,7 +359,8 @@ export class CityScene {
     }
     for (const [id, entry] of this.tiles) {
       if (!this.wanted.has(id)) {
-        viewer.scene.primitives.remove(entry.primitive);
+        entry.primitives.forEach(p=>viewer.scene.primitives.remove(p));
+        this.detail.removeTile(id);
         this.tiles.delete(id);
       }
     }
@@ -371,14 +373,16 @@ export class CityScene {
   private async loadTile(id: string) {
     const controller = new AbortController();
     this.pending.set(id, controller);
+    const primitives: Primitive[] = [];
     try {
       const collection = await fetchJSON<FeatureCollection>(
         `/data/${this.manifest.dataset}/tiles/${id}.json`, controller.signal,
       );
       if (this.disposed || controller.signal.aborted || !this.wanted.has(id)) return;
-      const instances: GeometryInstance[] = [];
+      const groups = new Map<FacadeKind,GeometryInstance[]>(facadeKinds.map(kind=>[kind,[]]));
       for (const feature of collection.features) {
         const properties = feature.properties as BuildingProperties;
+        const instances = groups.get(facadeKind(properties,buildingArea(feature as BuildingFeature)))!;
         for (const rings of ringsOf(feature.geometry)) {
           instances.push(new GeometryInstance({
             id: properties,
@@ -389,12 +393,18 @@ export class CityScene {
           }));
         }
       }
-      const primitive = this.viewer.scene.primitives.add(new Primitive({
-        geometryInstances: instances, appearance: this.buildingAppearance, asynchronous: true,
-        releaseGeometryInstances: true,
-      }));
-      this.tiles.set(id, { primitive, count: collection.features.length });
+      for (const [kind,instances] of groups) {
+        if (!instances.length) continue;
+        primitives.push(this.viewer.scene.primitives.add(new Primitive({
+          geometryInstances: instances, appearance: this.buildingAppearances[kind], asynchronous: true,
+          releaseGeometryInstances: true, show:this.settings.buildings,
+        })));
+      }
+      this.detail.setTile(id,collection.features as BuildingFeature[]);
+      this.tiles.set(id, { primitives, count: collection.features.length });
     } catch (error) {
+      primitives.forEach(p=>this.viewer.scene.primitives.remove(p));
+      this.detail.removeTile(id);
       if (!controller.signal.aborted && !this.disposed) {
         this.failed.add(id);
         this.callbacks.onError(`建筑分块 ${id} 加载失败：${error instanceof Error ? error.message : String(error)}。可点击“重试加载”。`);
@@ -407,11 +417,12 @@ export class CityScene {
 
   private report() {
     const position = this.viewer.camera.positionCartographic;
-    const visible = [...this.tiles.values()].filter((entry) => entry.primitive.ready && entry.primitive.show);
+    const ready = [...this.tiles.values()].filter(entry=>entry.primitives.every(p=>p.ready));
+    const visible = ready.filter(entry=>entry.primitives.some(p=>p.show));
     const stats: SceneStats = {
       loadedTiles: visible.length,
       loadedBuildings: visible.reduce((n, entry) => n + entry.count, 0),
-      loading: this.pending.size > 0 || visible.length < this.tiles.size, overview: this.overview,
+      loading: this.pending.size > 0 || ready.length < this.tiles.size || !this.surfacesReady(), overview: this.overview,
       height: position.height,
       longitude: CesiumMath.toDegrees(position.longitude), latitude: CesiumMath.toDegrees(position.latitude),
     };
@@ -424,6 +435,7 @@ export class CityScene {
 
   retry() {
     this.failed.clear();
+    this.detail.retry();
     this.scheduleTiles();
   }
 
@@ -465,7 +477,9 @@ export class CityScene {
 
   async screenshot(): Promise<Blob> {
     this.updateTiles();
+    await this.detail.waitUntilReady();
     await this.waitForGeometry(true);
+    await this.detail.waitUntilReady();
     this.viewer.render();
     return new Promise((resolve, reject) => {
       this.viewer.canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('截图生成失败。')), 'image/png');
@@ -483,6 +497,8 @@ export class CityScene {
     window.removeEventListener('resize', this.resizeListener);
     this.handler.destroy();
     this.orbit.destroy();
+    this.detail.destroy();
+    this.tiles.clear(); this.pending.clear(); this.wanted.clear(); this.failed.clear();
     this.viewer.destroy();
   }
 }

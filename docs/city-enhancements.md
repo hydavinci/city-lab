@@ -1,10 +1,11 @@
-# 城市增强数据准备、安全路线编译与资产切片（Tasks 1–3）
+# 城市增强数据准备、安全路线编译、资产切片与静态细节（Tasks 1–4）
 
 Task 1 准备共享类型、严格解析器和可追溯的金鸡湖候选源数据；
 Task 2 增加米制路线、完整身体扫掠验证、静态容量和原子发布门禁。
 **不是增强功能发布**：已生成 staging 路线及 Task 3 两模型测试切片；
 没有模拟或 public 增强清单。
-原 `CityManifest.version: 1`、基础数据 `dbbaf1f81d32fc39` 和现有浏览功能保持不变。
+`CityManifest.version: 1` 与现有浏览功能保持不变。Task 4 新基础数据为
+`c8a953228b2ff6af`；旧 `dbbaf1f81d32fc39` 和 Task 3 before 证据完整保留。
 
 ## 显式下载
 
@@ -270,3 +271,62 @@ Task 5 必须验证完整动画包络并调整步态或重新编译／验证路�
 
 本切片不证明 20 车／30 人持续活动、碰撞安全、最终九模型质量或硬件帧率目标；
 当前仅确认真实模型的视觉、米制尺度、朝向和独立动画时钟。
+
+## Task 4：全城米制道路与确定性建筑细节
+
+```sh
+# 仅读取现有有效全城 raw 缓存；不下载、不删除旧数据集
+npm run data:build
+npm test -- tests/unit/detail.test.ts tests/unit/build.test.ts tests/unit/enhancements.test.ts tests/unit/geo.test.ts tests/unit/pipeline.test.ts
+npm run build
+npm run test:e2e -- tests/e2e/clarity.spec.ts tests/e2e/enhancements-visual.spec.ts
+```
+
+### 数据与真实性
+
+surface 配方更新为 `surface-v2-metre-roads`，新内容 ID 为 `c8a953228b2ff6af`。
+616 个建筑分块和 boundary 与旧数据逐字节相同；58,026 个 surface feature 的
+ID、几何、原 `layer/name/kind` 不变。46,090 条道路另保留完整 `sourceTags`、
+`widthMetres` 与 `widthBasis`：有效 width（米或英尺）优先，其次 lanes × 3.2 m，
+否则按 highway 类型使用记录在案的宽度假设。只有 16 条道路有可用显式宽度，
+其余 46,074 条是推断，不是测绘。完整新数据为 54,072,384 bytes，
+比旧数据多 8,796,241 bytes；旧目录仍保留，不能把增量当作完整包大小。
+
+`DetailLayer` 不提供通行规则，也不使用这些视觉宽度替代 Task 2 的已验证走廊。
+13,850 条含 bridge/tunnel/非零 layer 的道路保留原概览线，不虚构高程。
+新地面道路使用 0.3 m 示意抬高的 Cesium Corridor，不是实际地形或道路测量。
+没有生成来源不明的人行道或地面入口。
+
+### 渲染与生命周期
+
+- 四种共享立面外观：residential、office、commercial、industrial；已知 kind 优先，
+  未知 kind 根据 ID／高度／面积稳定选择。保留建筑选择 ID、高度、basis 等元数据。
+  日间有窗框、玻璃、楼层线；沿用世界坐标锚点、`fwidth` 抗锯齿与夜间 glow。
+- 设备、屋顶出入口亭及短女儿墙均为**推断的程序几何**，不是实地构件或最终 GLB。
+  8×8 有界内部候选网格复用 Task 2 完整 polygon／包络校验，避开孔洞、边缘及其他设备。
+  女儿墙只接受可验证的向内短段；非法／过小 footprint 返回带源 ID 的诊断，
+  合法生成也记录 inferred provenance。不会用包围盒填满凹形或孔洞。
+- 道路源线按稳定区域归属，区域用完整道路的联合 bounds 参与可见性选择，
+  loaded-ID 集合防重复；最多 low/medium/high **4/8/14** 个近景区域。
+  远景是一批带实例 show 属性的概览线，近景真实几何 ready 后才隐藏对应线；
+  卸载、失败时恢复，桥隧等未增强道路始终保留概览。
+- 细节进入阈值为每米 ≥0.8 屏幕像素，保持至 <0.5；相机高度 >24 km 关闭。
+  建筑每块拥有四种 profile 中非空批次及 accessory 所有权；道路不依赖建筑显示开关。
+  evict／abort／destroy 清理资源；错误走原错误通道，截图等待就绪并有超时，
+  失败可重试。没有生产调试全局、新 UI 或移动车人。
+
+### 验收证据与后续门禁
+
+Task 3 四张 before PNG 的 SHA-256 和固定相机元数据未改写。
+Task 4 after 使用同一 city/district 相机、1600×900、DPR1、medium，另拍近景日／夜：
+检查真实屋顶凸起、窗框／玻璃、道路带状几何，而不只比较颜色。
+真实 `way/419912486:0` Corridor 的生成顶点横向跨度为 **9.60000045 m**，
+输入宽度 9.6 m；屋顶亭示例 base 13.3 m、top 15.1 m。
+浏览器同时验证四 profile 批次、实际顶点、overview show 属性切换、
+几何失败后恢复／重试、迟到的 aborted tile 不注册、十轮远近切换资源计数不增长，
+以及 destroy 后资源为零。这里不声称证明最终移动模拟或硬件帧率目标。
+
+Task 5 必须针对新 baseDataset 重新编译／核验候选 provenance；
+现存 staging 候选和 before 快照仍绑定旧 ID，不能静默改写为新数据已验证。
+**Task 3 动态 Walk 包络超出 0.6×0.6 m 的门禁继续有效**。
+当前仍没有 `public/enhancements/manifest.json`，也没有最终九模型资产包或运行时车人。

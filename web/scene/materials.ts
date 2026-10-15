@@ -1,4 +1,5 @@
 import { Cartesian3, Color, Material, Matrix3, Matrix4, Transforms } from 'cesium';
+import { facadeKinds, type FacadeKind } from '../core/detail';
 
 const FACADE_ORIGIN = Cartesian3.fromDegrees(120.65, 31.32);
 const origin = [FACADE_ORIGIN.x, FACADE_ORIGIN.y, FACADE_ORIGIN.z];
@@ -29,14 +30,26 @@ export const facadeVertexShader = `
   }
 `;
 
-export function buildingMaterial(night: boolean, glow: number): Material {
+export function buildingMaterial(night: boolean, glow: number, kind: FacadeKind = 'residential'): Material {
   const basis = Matrix4.getMatrix3(Transforms.eastNorthUpToFixedFrame(FACADE_ORIGIN), new Matrix3());
+  const profiles = {
+    residential: { bay:4.2, floor:3.4, pane:0.27, color:'#abb8b3' },
+    office: { bay:3.2, floor:3.8, pane:0.38, color:'#92aeb8' },
+    commercial: { bay:5.2, floor:4.2, pane:0.34, color:'#b6b1a1' },
+    industrial: { bay:6.4, floor:5.0, pane:0.20, color:'#a4aca9' },
+  };
+  const profile = profiles[kind];
   return new Material({
     fabric: {
       type: 'SuzhouFacade',
       uniforms: {
         nightMode: night ? 1 : 0,
         glow,
+        profile: facadeKinds.indexOf(kind),
+        bayWidth: profile.bay,
+        floorHeight: profile.floor,
+        paneHalfWidth: profile.pane,
+        facadeColor: Color.fromCssColorString(profile.color),
         east: Matrix3.getColumn(basis, 0, new Cartesian3()),
         north: Matrix3.getColumn(basis, 1, new Cartesian3()),
         up: Matrix3.getColumn(basis, 2, new Cartesian3()),
@@ -53,17 +66,28 @@ export function buildingMaterial(night: boolean, glow: number): Material {
           float roof = step(0.65, abs(dot(normal, up)));
           float horizontal = abs(dot(normal, east)) > abs(dot(normal, north))
             ? dot(delta, north) : dot(delta, east);
-          vec2 grid = vec2(horizontal / 4.2, dot(delta, up) / 3.4);
+          vec2 grid = vec2(horizontal / bayWidth, dot(delta, up) / floorHeight);
           vec2 cell = fract(grid);
           vec2 footprint = max(fwidth(grid), vec2(0.0001));
           vec2 aa = footprint * 0.5;
-          vec2 paneMask = smoothstep(vec2(0.23, 0.22) - aa, vec2(0.23, 0.22) + aa, cell)
-            * (1.0 - smoothstep(vec2(0.77, 0.73) - aa, vec2(0.77, 0.73) + aa, cell));
+          vec2 paneLo = vec2(0.5 - paneHalfWidth, 0.22);
+          vec2 paneHi = vec2(0.5 + paneHalfWidth, 0.73);
+          vec2 paneMask = smoothstep(paneLo - aa, paneLo + aa, cell)
+            * (1.0 - smoothstep(paneHi - aa, paneHi + aa, cell));
+          vec2 frameMask = smoothstep(paneLo - vec2(0.035) - aa, paneLo - vec2(0.035) + aa, cell)
+            * (1.0 - smoothstep(paneHi + vec2(0.035) - aa, paneHi + vec2(0.035) + aa, cell));
           float detail = 1.0 - smoothstep(0.25, 0.85, max(footprint.x, footprint.y));
           float occupancy = step(0.48, windowHash(floor(grid)));
           // Unresolved windows converge to their average light instead of flickering single pixels.
           float lit = mix(0.143, occupancy * paneMask.x * paneMask.y, detail) * (1.0 - roof);
-          vec3 dayColor = mix(vec3(0.67, 0.72, 0.70), vec3(0.28, 0.39, 0.40), roof);
+          float pane = paneMask.x * paneMask.y;
+          float frame = max(0.0, frameMask.x * frameMask.y - pane);
+          float floorBand = 1.0 - smoothstep(0.035 - aa.y, 0.035 + aa.y, min(cell.y, 1.0 - cell.y));
+          float wallDetail = detail * (1.0 - roof);
+          vec3 dayColor = mix(facadeColor.rgb, vec3(0.28, 0.39, 0.40), roof);
+          dayColor = mix(dayColor, vec3(0.72, 0.77, 0.75), frame * wallDetail);
+          dayColor = mix(dayColor, vec3(0.22, 0.34, 0.39), pane * wallDetail);
+          dayColor = mix(dayColor, facadeColor.rgb * 0.64, floorBand * wallDetail);
           vec3 nightColor = mix(vec3(0.16, 0.21, 0.24), vec3(0.10, 0.17, 0.20), roof);
           m.diffuse = mix(dayColor, nightColor, nightMode);
           m.emission = nightMode * (nightColor * 0.25

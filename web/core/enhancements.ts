@@ -183,6 +183,8 @@ function polygon(value: Polygon2): void {
   }
 }
 
+export { polygon as validatePolygon };
+
 export function parseEnhancementManifest(value: unknown, baseDataset: string): EnhancementManifest {
   object(value);
   const m = value as EnhancementManifest;
