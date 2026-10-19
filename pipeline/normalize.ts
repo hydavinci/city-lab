@@ -1,6 +1,6 @@
 import type { FeatureCollection, Polygon, MultiPolygon } from 'geojson';
 import { deriveHeight, geometryBounds, insideBoundary, validateRing } from '../web/core/geo';
-import type { BuildingFeature } from '../web/core/types';
+import type { SourceBuildingFeature } from '../web/core/types';
 
 export interface OverpassResponse {
   elements: Record<string, unknown>[];
@@ -33,7 +33,7 @@ export function mergeSurfaceData(inputs: unknown[]): OverpassResponse {
 }
 
 export function normalizeBuildings(collection: FeatureCollection, boundary: Polygon | MultiPolygon) {
-  const features: BuildingFeature[] = [];
+  const features: SourceBuildingFeature[] = [];
   const seen = new Set<string>();
   let skipped = 0;
   for (const feature of collection.features) {

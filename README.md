@@ -4,7 +4,8 @@
 
 City Lab 将 OpenStreetMap 中的道路、水系和建筑轮廓转为可交互的三维城市。
 首个城市为**江苏省苏州市完整行政区域**，不是随机楼群，也不是仅覆盖金鸡湖的局部演示。
-下载仓库并安装依赖后即可浏览，不需要地图 API Key、Cesium ion 令牌或云端后端。
+下载仓库、安装依赖并生成建筑瓦片后即可浏览，不需要地图 API Key、
+Cesium ion 令牌或云端后端。
 
 *A local-first 3D city workbench built with React, TypeScript and CesiumJS, using real OpenStreetMap geometry.*
 
@@ -21,7 +22,8 @@ City Lab 将 OpenStreetMap 中的道路、水系和建筑轮廓转为可交互�
 
 - Node.js **22.12 或更高版本**，以及随 Node.js 安装的 npm。
 - 支持 **WebGL 2** 的桌面浏览器，并启用硬件加速。
-- 首次安装依赖需要网络；随库提供的场景数据可在本地离线浏览。
+- 首次安装依赖需要网络；随库提供基础地理数据，建筑瓦片可在本地离线生成。
+- 当前全城建筑瓦片约 **5.2 GB**；生产构建会再复制一份到 `dist/`，请预留足够磁盘空间。
 
 ### 启动工作台
 
@@ -29,14 +31,23 @@ City Lab 将 OpenStreetMap 中的道路、水系和建筑轮廓转为可交互�
 git clone https://github.com/hydavinci/city-lab.git
 cd city-lab
 npm ci
+npm run data:architecture:build
 npm run dev
 ```
 
-打开 **http://127.0.0.1:5173**。项目附带 `public/data/` 下已生成的真实数据，
-日常启动不需要调用地图服务、Cesium ion 令牌、在线底图或外部字体。
-**第一次体验无需执行 `data:fetch` 或 `data:build`。**
+打开 **http://127.0.0.1:5173**。项目附带 `public/data/` 下已生成的真实基础数据。
+**首次启动必须执行 `data:architecture:build`**，将这些数据与随库生成器转换为
+`public/architecture-city/` 下的建筑瓦片；该目录不加入 Git，也不需要 Git LFS。
+全城生成耗时较长，命令会输出进度，中断后可重新执行以恢复已验证的批次。
+基础数据或建筑生成器更新后需要再次执行；日常启动可以复用已生成资源。
+`dev` 和 `build` 不会自动生成瓦片。
+
+第一次体验无需执行 `data:fetch` 或 `data:build`，建筑生成不请求在线地图服务，
+也不需要 Cesium ion 令牌、在线底图或外部字体。
 
 ### 生产构建
+
+先完成上面的建筑瓦片生成步骤，再执行：
 
 ```bash
 npm run build
@@ -97,7 +108,8 @@ npm run preview
 
 ## 随库数据
 
-仓库包含约 **45.3 MB** 的已处理数据，克隆后即可使用，无需 Git LFS。
+仓库包含约 **45.3 MB** 的已处理基础地理数据，无需 Git LFS。
+全城建筑 3D Tiles 是派生资源，不随 Git 提交；首次运行时按上面的步骤在本地生成。
 下列统计来自 [`public/data/manifest.json`](public/data/manifest.json)，随数据更新可能变化。
 
 | 项目 | 当前快照 |
@@ -127,18 +139,25 @@ npm run preview
 # 获取尚未缓存或校验失败的源文件，再生成离线分块
 npm run data:fetch
 npm run data:build
+npm run data:architecture:build
 
 # 主动重新下载
 npm run data:fetch -- --refresh
 npm run data:build
+npm run data:architecture:build
 
 # 公共服务不可用时，使用你能访问的 Overpass 服务
 OVERPASS_ENDPOINT=https://overpass-api.de/api/interpreter npm run data:fetch
+npm run data:build
+npm run data:architecture:build
 ```
 
 `data:build` 对所有输入进行完整性检查，生成版本化数据目录，
 最后才原子替换 `manifest.json`。失败不会发布成功形态的空数据。
-原始下载缓存保存在 `data/raw/`，不加入 Git；可运行的处理结果保存在 `public/data/`。
+原始下载缓存保存在 `data/raw/`，不加入 Git；处理后的基础数据保存在 `public/data/`。
+建筑生成器读取基础数据，将全城瓦片和清单写入 `public/architecture-city/`；
+代码、源资产和生成脚本随库提交，大型派生瓦片与其中的恢复记录仅保存在本地。
+部署时必须包含生成后的建筑资源，不能只发布基础数据。
 旧版本保留在 `public/data/`；磁盘空间不足时，可在停止服务后手动删除不再使用的版本目录，
 不要删除当前清单指向的版本。更新后刷新浏览器；生产预览还需要重新运行 `npm run build`。
 
@@ -176,6 +195,7 @@ web/
 pipeline/         下载、规范化、版本化离线数据生成
 data/raw/         原始下载缓存（不加入 Git）
 public/data/      可直接运行的 OSM 派生数据与清单
+public/architecture-city/  本地生成的全城建筑瓦片（不加入 Git，部署时必需）
 tests/unit/       地理、配置、生成管线测试
 tests/e2e/        真实浏览器交互、离线和错误路径测试
 tests/fixtures/   清晰度与相机操作的浏览器测试场景
@@ -210,7 +230,8 @@ npm run test:e2e
 浏览器测试覆盖离线启动、图层与配置、截图、分块重试／释放、GPU 几何就绪、
 高 DPI、窗光稳定性，以及水平附近的环绕与导航恢复。
 
-端到端测试不访问在线地图服务；浏览器缺失时先执行上面的安装命令。
+端到端测试需要先完成 `npm run data:architecture:build`，不访问在线地图服务；
+浏览器缺失时先执行上面的安装命令。
 测试会启动本地开发服务，或复用已经运行的 `127.0.0.1:5173`。
 
 ## 常见问题
@@ -218,7 +239,9 @@ npm run test:e2e
 **页面没有城市，或提示数据文件缺失？**
 
 确认已完整克隆 `public/data/`，并通过 `npm run dev` 启动，而不是直接打开 HTML。
-如果主动删除过场景数据，执行 `npm run data:fetch && npm run data:build`。
+如果缺少建筑清单或瓦片，执行 `npm run data:architecture:build`，完成后刷新页面。
+如果主动删除过基础数据，先执行 `npm run data:fetch && npm run data:build`，
+再生成建筑瓦片。使用生产预览时还需要重新执行 `npm run build`。
 
 **全市视角看不到建筑？**
 

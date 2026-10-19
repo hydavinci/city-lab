@@ -1,0 +1,396 @@
+{
+  "version": 1,
+  "baseDataset": "c8a953228b2ff6af",
+  "origin": [
+    120.628075,
+    31.3166
+  ],
+  "bounds": [
+    120.62773,
+    31.31611,
+    120.62842,
+    31.31709
+  ],
+  "buildings": [
+    {
+      "id": "relation/8507458",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367137",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367148",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367149",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367150",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367151",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367152",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367154",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367179",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367180",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367181",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367183",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367184",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367186",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367187",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367188",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367189",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367190",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367204",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367205",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367206",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367207",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367208",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367209",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367225",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367227",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367232",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367233",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367234",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367235",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367238",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367239",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367241",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367243",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367245",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367246",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367247",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367248",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367250",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614367251",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614428690",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614428692",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614428694",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614428695",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    },
+    {
+      "id": "way/614428697",
+      "name": "",
+      "kind": "yes",
+      "height": 12.8,
+      "basis": "fallback",
+      "estimated": true
+    }
+  ],
+  "inferred": [
+    "Roof profiles and tile patterns",
+    "Plaster, timber and stone materials",
+    "Wall thickness, floors, doors and window placement",
+    "Source heights are estimates; no architectural survey"
+  ],
+  "lods": {
+    "near": {
+      "uri": "ffd0101270c483bbbd6c34ac7807a8dd/near.glb",
+      "bytes": 14314592,
+      "sha256": "657184912a2877519e7ea858f3d46cb58fb1d3c68a1b796f9a17f5f4b5f951d0",
+      "triangles": 274792
+    },
+    "far": {
+      "uri": "ffd0101270c483bbbd6c34ac7807a8dd/far.glb",
+      "bytes": 702732,
+      "sha256": "71eef1b998979765a68b6ac6f44b374f38cafbba425cab397a0eb586bae049b4",
+      "triangles": 10632
+    }
+  }
+}

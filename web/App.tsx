@@ -9,7 +9,8 @@ import type { LucideIcon } from 'lucide-react';
 import type { FeatureCollection } from 'geojson';
 import { CityScene, fetchJSON, PLACES } from './scene/CityScene';
 import { defaultSettings, encodeSettings, parseSettings, SETTINGS_KEY } from './core/settings';
-import type { BuildingProperties, CityManifest, SceneSettings, SceneStats } from './core/types';
+import type { CityManifest, SceneSettings, SceneStats } from './core/types';
+import type { SelectedBuilding } from './core/landmarks';
 
 const number = new Intl.NumberFormat('zh-CN');
 const initialStats: SceneStats = {
@@ -81,7 +82,7 @@ export function App() {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [selected, setSelected] = useState<BuildingProperties | null>(null);
+  const [selected, setSelected] = useState<SelectedBuilding | null>(null);
   const [place, setPlace] = useState('苏州市全域');
   const [tab, setTab] = useState<'scene' | 'data'>('scene');
   const [help, setHelp] = useState(false);
@@ -222,9 +223,16 @@ export function App() {
       <div className="mouse-hint">左键拖动平移 <span>·</span> 滚轮缩放 <span>·</span> 右键拖动缩放 <span>·</span> 中键拖动环绕</div>
       {selected && <section className="selection-card">
         <div className="section-title"><span><Building2 size={16} /> 建筑信息</span><button className="icon-button" aria-label="关闭建筑信息" onClick={() => setSelected(null)}><X size={16} /></button></div>
-        <h3>{selected.name || '未命名建筑'}</h3>
-        <dl><div><dt>高度</dt><dd>{selected.height.toFixed(1)} m</dd></div>
-          <div><dt>高度依据</dt><dd>{selected.basis === 'height' ? 'OSM 标注高度' : selected.basis === 'levels' ? '楼层数推算 · 估算' : '类型默认值 · 估算'}</dd></div>
+        <h3>{selected.model?.name || selected.name || '未命名建筑'}</h3>
+        {selected.model && <>
+          <dl><div><dt>建模总高</dt><dd>{selected.model.height} m</dd></div>
+            <div><dt>建模依据</dt><dd>{selected.model.heightBasis === 'verified' ? '资料核实' : selected.model.heightBasis === 'source' ? '保留 OSM 高度' : '比例估算'}</dd></div></dl>
+          <p className="section-note">{selected.model.approximation}</p>
+          {selected.model.sources.map(source => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.label}<ArrowUpRight size={12} /></a>)}
+        </>}
+        <dl><div><dt>{selected.model ? '原始 OSM 高度' : '高度'}</dt><dd>{selected.basis === 'reference' ? '未标注' : `${selected.height.toFixed(1)} m`}</dd></div>
+          <div><dt>高度依据</dt><dd>{selected.basis === 'reference' ? '资料核实 · 补充景点' : selected.basis === 'height' ? 'OSM 标注高度' : selected.basis === 'levels' ? '楼层数推算 · 估算' : '类型默认值 · 估算'}</dd></div>
+          {selected.model?.source && <div><dt>景点采集时间</dt><dd>{selected.model.source.timestamp.slice(0, 10)}</dd></div>}
           <div><dt>源标识</dt><dd>{selected.id}</dd></div></dl>
         <a href={`https://www.openstreetmap.org/${selected.id}`} target="_blank" rel="noreferrer">查看 OpenStreetMap 原始记录 <ArrowUpRight size={12} /></a>
       </section>}
@@ -262,7 +270,7 @@ export function App() {
           <section className="panel-section">
             <div className="section-title"><span><SlidersHorizontal size={15} /> 渲染质量</span><span className="tiny-label">QUALITY</span></div>
             <div className="segmented">{([['low', '流畅'], ['medium', '均衡'], ['high', '精细']] as const).map(([value, text]) => <button key={value} className={settings.quality === value ? 'active' : ''} aria-pressed={settings.quality === value} onClick={() => update('quality', value)}>{text}</button>)}</div>
-            <p className="section-note">均衡适配高分屏，精细增加采样，流畅降低分辨率。建筑按视角分块加载，远景仅显示地表与路网。</p>
+            <p className="section-note">全城已有建筑按类型细化，靠近后加载窗洞、屋顶和立面构件。可从古城民居、住宅、办公或工业街区进入近景；原 45 栋古城样板继续保留。画质控制细节数量，远景自动简化。</p>
           </section>
         </> : <>
           <section className="panel-section">
@@ -279,6 +287,8 @@ export function App() {
               <div><dt>坐标系统</dt><dd>WGS84</dd></div>
             </dl>
             <p className="section-note">估算高度 {number.format(estimated)} 栋。夜景窗光是艺术化表达，不代表实际楼宇照明。</p>
+            <p className="section-note">立面、屋顶设备和街景构件为推断装饰，并非实测实景。</p>
+            <p className="section-note">全城 {number.format(counts?.buildings ?? 0)} 条源建筑记录保留原始轮廓、源标识和高度依据。东方之门、苏州中心、国金中心、北寺塔、虎丘塔和瑞光塔采用资料辅助的专属近似模型，建模高度与原始高度分开显示。地下东方之门站不生成地上建筑体，排除原因记入发布清单。其他建筑按类型推断建模；不补造地图中缺失的建筑。</p>
           </section>
           <section className="panel-section">
             <div className="section-title"><span><Download size={15} /> 配置管理</span></div>
@@ -315,7 +325,7 @@ export function App() {
       <button className="icon-button close-dialog" aria-label="关闭操作指南" onClick={() => setHelp(false)}><X size={18} /></button>
       <Navigation size={24} className="color-mint" /><h2 id="help-heading">从全域，到一条水巷。</h2>
       <p>点击“城市漫游”中的地点，进入倾斜三维视角。用鼠标滚轮靠近城市，中键拖动环绕，单击建筑查看来源和高度依据。接近水平时保留安全俯角，向下拖动可回到俯视。</p>
-      <p>建筑仅按当前视角加载有限分块。远景隐藏建筑，不代表该区域没有数据。此版本基于 OSM 轮廓拉伸，不是照片级苏州实景。</p>
+      <p>建筑按当前视角加载有限分块，近景按类型细化；远景简化或隐藏，不代表该区域没有数据。位置与高度依据来自 OSM，建筑细节为推断，不是照片级苏州实景。</p>
       <button className="button primary" onClick={() => setHelp(false)}>开始探索 <ArrowUpRight size={15} /></button>
     </section></div>}
   </div>;

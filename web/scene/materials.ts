@@ -1,5 +1,5 @@
 import { Cartesian3, Color, Material, Matrix3, Matrix4, Transforms } from 'cesium';
-import { facadeKinds, type FacadeKind } from '../core/detail';
+import { facadeKinds, facadeProfiles, type FacadeKind } from '../core/detail';
 
 const FACADE_ORIGIN = Cartesian3.fromDegrees(120.65, 31.32);
 const origin = [FACADE_ORIGIN.x, FACADE_ORIGIN.y, FACADE_ORIGIN.z];
@@ -32,14 +32,9 @@ export const facadeVertexShader = `
 
 export function buildingMaterial(night: boolean, glow: number, kind: FacadeKind = 'residential'): Material {
   const basis = Matrix4.getMatrix3(Transforms.eastNorthUpToFixedFrame(FACADE_ORIGIN), new Matrix3());
-  const profiles = {
-    residential: { bay:4.2, floor:3.4, pane:0.27, color:'#abb8b3' },
-    office: { bay:3.2, floor:3.8, pane:0.38, color:'#92aeb8' },
-    commercial: { bay:5.2, floor:4.2, pane:0.34, color:'#b6b1a1' },
-    industrial: { bay:6.4, floor:5.0, pane:0.20, color:'#a4aca9' },
-  };
-  const profile = profiles[kind];
+  const profile = facadeProfiles[kind];
   return new Material({
+    translucent: false,
     fabric: {
       type: 'SuzhouFacade',
       uniforms: {
@@ -70,8 +65,10 @@ export function buildingMaterial(night: boolean, glow: number, kind: FacadeKind 
           vec2 cell = fract(grid);
           vec2 footprint = max(fwidth(grid), vec2(0.0001));
           vec2 aa = footprint * 0.5;
-          vec2 paneLo = vec2(0.5 - paneHalfWidth, 0.22);
-          vec2 paneHi = vec2(0.5 + paneHalfWidth, 0.73);
+          float office = 1.0 - step(0.1, abs(profile - 1.0));
+          float industrial = step(2.5, profile);
+          vec2 paneLo = vec2(0.5 - paneHalfWidth, mix(0.22, 0.60, industrial));
+          vec2 paneHi = vec2(0.5 + paneHalfWidth, mix(0.73, 0.89, office));
           vec2 paneMask = smoothstep(paneLo - aa, paneLo + aa, cell)
             * (1.0 - smoothstep(paneHi - aa, paneHi + aa, cell));
           vec2 frameMask = smoothstep(paneLo - vec2(0.035) - aa, paneLo - vec2(0.035) + aa, cell)
@@ -83,17 +80,32 @@ export function buildingMaterial(night: boolean, glow: number, kind: FacadeKind 
           float pane = paneMask.x * paneMask.y;
           float frame = max(0.0, frameMask.x * frameMask.y - pane);
           float floorBand = 1.0 - smoothstep(0.035 - aa.y, 0.035 + aa.y, min(cell.y, 1.0 - cell.y));
+          float mullion = 1.0 - smoothstep(0.02-aa.x, 0.02+aa.x, min(cell.x,1.0-cell.x));
+          float reveal = frameMask.x * frameMask.y * (1.0-pane)
+            * smoothstep(0.5,0.72,cell.y);
+          float cladding = 0.92 + 0.08 * smoothstep(0.06,0.16,fract(grid.x*4.0));
           float wallDetail = detail * (1.0 - roof);
-          vec3 dayColor = mix(facadeColor.rgb, vec3(0.28, 0.39, 0.40), roof);
-          dayColor = mix(dayColor, vec3(0.72, 0.77, 0.75), frame * wallDetail);
-          dayColor = mix(dayColor, vec3(0.22, 0.34, 0.39), pane * wallDetail);
-          dayColor = mix(dayColor, facadeColor.rgb * 0.64, floorBand * wallDetail);
+          vec3 dayColor = mix(facadeColor.rgb, vec3(0.43, 0.47, 0.43), roof);
+          dayColor *= mix(1.0,cladding,industrial*wallDetail);
+          dayColor = mix(dayColor, vec3(0.79, 0.79, 0.73), frame * wallDetail);
+          vec3 glass = mix(vec3(0.13,0.24,0.29),vec3(0.39,0.55,0.59),cell.y);
+          glass *= 0.88+0.12*windowHash(floor(grid));
+          dayColor = mix(dayColor, glass, pane * wallDetail);
+          dayColor = mix(dayColor, facadeColor.rgb * 0.57, floorBand * wallDetail);
+          dayColor = mix(dayColor, vec3(0.62,0.69,0.69),mullion*office*wallDetail);
+          dayColor *= 1.0-0.24*reveal*wallDetail;
           vec3 nightColor = mix(vec3(0.16, 0.21, 0.24), vec3(0.10, 0.17, 0.20), roof);
           m.diffuse = mix(dayColor, nightColor, nightMode);
           m.emission = nightMode * (nightColor * 0.25
             + lit * vec3(1.0, 0.76, 0.45) * glow * 1.3);
-          m.specular = 0.12;
-          m.shininess = 12.0;
+          vec3 tangent = abs(dot(normal, east)) > abs(dot(normal, north)) ? north : east;
+          float relief = (smoothstep(paneLo.x-aa.x,paneLo.x+aa.x,cell.x)
+            - smoothstep(paneLo.x+0.04-aa.x,paneLo.x+0.04+aa.x,cell.x))
+            - (smoothstep(paneHi.x-0.04-aa.x,paneHi.x-0.04+aa.x,cell.x)
+            - smoothstep(paneHi.x-aa.x,paneHi.x+aa.x,cell.x));
+          m.normal = normalize(materialInput.normalEC + czm_viewRotation * tangent * relief * wallDetail * 0.35);
+          m.specular = mix(0.08,0.48,pane*wallDetail);
+          m.shininess = mix(12.0,48.0,office);
           m.alpha = 1.0;
           return m;
         }

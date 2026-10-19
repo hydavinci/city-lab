@@ -2,7 +2,7 @@
   "version": 1,
   "status": "audited-source-candidate-not-a-runtime-release",
   "name": "金鸡湖西岸：星港街／苏惠路与南段湖滨步道",
-  "baseDataset": "dbbaf1f81d32fc39",
+  "baseDataset": "c8a953228b2ff6af",
   "bounds": [120.674, 31.312, 120.684, 31.320],
   "boundary": [[120.674, 31.312], [120.684, 31.312], [120.684, 31.320], [120.674, 31.320], [120.674, 31.312]],
   "areaKm2": 0.8450424241483193,

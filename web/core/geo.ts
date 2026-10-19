@@ -1,10 +1,10 @@
 import type { MultiPolygon, Polygon, Position } from 'geojson';
-import type { Bounds, HeightBasis, TileInfo } from './types';
+import type { Bounds, SourceHeightBasis, TileInfo } from './types';
 
 const TILE_SIZE = 0.025;
 
 export function deriveHeight(tags: Record<string, unknown>): {
-  height: number; basis: HeightBasis; estimated: boolean;
+  height: number; basis: SourceHeightBasis; estimated: boolean;
 } {
   const text = String(tags.height ?? '').trim();
   const match = /^(\d+(?:\.\d+)?)\s*(m|ft|')?$/i.exec(text);

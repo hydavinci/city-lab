@@ -6,6 +6,186 @@ import currentManifest from '../../public/data/manifest.json' with { type: 'json
 test.use({ viewport: { width: 1600, height: 900 }, deviceScaleFactor: 1 });
 test.setTimeout(180_000);
 
+test('production scene loads native architectural bodies and bounded street models without duplicate building detail', async ({page}) => {
+  await open(page);
+  await page.evaluate(()=>window.mobility.baseline('district',false));
+  const state=await page.evaluate(()=>{
+    const scene=window.mobility.scene as any,detail=scene.detail;
+    return {models:detail.resourceCounts().models,
+      duplicateTiles:detail.tiles.size, architecture:window.mobility.architecture.resources(),
+      actors:[...detail.districtModels.values()].map((m:any)=>m.id.asset)};
+  });
+  expect(state.models).toBeGreaterThan(0);
+  expect(state.models).toBeLessThanOrEqual(64);
+  expect(state.duplicateTiles).toBe(0);
+  expect(state.architecture).toMatchObject({tilesets:1,loading:false});
+  expect(state.architecture.visibleBuildings).toBeGreaterThan(0);
+  expect(state.architecture.mid+state.architecture.near).toBeGreaterThan(0);
+  expect(state.actors.every((kind:string)=>['tree','lamp','entrance','roof-unit'].includes(kind))).toBe(true);
+  expect(await page.evaluate(()=>window.mobility.errors)).toEqual([]);
+});
+
+test('optional district failure preserves base browsing and retries the manifest',async({page})=>{
+  await page.route('**/enhancements/manifest.json',route=>route.fulfill({status:503,body:'Unavailable'}));
+  await open(page);
+  await page.evaluate(()=>window.mobility.baseline('district',false));
+  const failed=await page.evaluate(()=>{
+    const scene=window.mobility.scene as any;
+    return {models:scene.detail.resourceCounts().models,
+      buildings:window.mobility.architecture.resources().visibleBuildings,errors:window.mobility.errors};
+  });
+  expect(failed.models).toBe(0);
+  expect(failed.buildings).toBeGreaterThan(0);
+  expect(failed.errors.join('\n')).toContain('金鸡湖街景加载失败');
+  await page.unroute('**/enhancements/manifest.json');
+  await page.evaluate(()=>window.mobility.scene.retry());
+  await page.waitForFunction(()=>{
+    const scene=window.mobility.scene as any;
+    return scene.detail.resourceCounts().models>0 && scene.detail.ready;
+  });
+  await page.evaluate(()=>window.mobility.scene.screenshot());
+});
+
+test('optional district asset corruption preserves the base city and can be retried',async({page})=>{
+  await page.route('**/enhancements/*/tree.glb',route=>route.fulfill({status:200,body:'corrupt GLB'}));
+  await open(page);
+  await page.evaluate(()=>window.mobility.baseline('district',false));
+  const state=await page.evaluate(()=>{
+    const scene=window.mobility.scene as any;
+    return {models:scene.detail.resourceCounts().models,ready:scene.detail.ready,
+      buildings:window.mobility.architecture.resources().visibleBuildings,errors:window.mobility.errors};
+  });
+  expect(state.models).toBe(0);
+  expect(state.ready).toBe(true);
+  expect(state.buildings).toBeGreaterThan(0);
+  expect(state.errors.join('\n')).toContain('hash/bytes mismatch');
+  await page.unroute('**/enhancements/*/tree.glb');
+  await page.evaluate(()=>window.mobility.scene.retry());
+  await page.evaluate(()=>window.mobility.scene.screenshot());
+  expect(await page.evaluate(()=>(window.mobility.scene as any).detail.resourceCounts().models)).toBeGreaterThan(0);
+});
+
+test('main page exposes a close lakeside view with exportable day and night detail',async({page},info)=>{
+  await page.goto('/');
+  await expect(page.getByTestId('scene-state')).toHaveText('场景就绪');
+  const preset=page.getByRole('button',{name:'湖畔街景',exact:true});
+  await expect(preset).toBeVisible();
+  await preset.click();
+  await expect(page.getByTestId('loaded-buildings')).not.toHaveText('0');
+  await expect(page.locator('.coordinates')).toHaveText(/120\.6750.*31\.3124/);
+  const coordinates=await page.locator('.coordinates').textContent();
+  for (const [label,mode] of [['日景','day'],['夜景','night']]) {
+    await page.getByRole('button',{name:label,exact:true}).click();
+    const pending=page.waitForEvent('download');
+    await page.getByRole('button',{name:'导出截图',exact:true}).click();
+    const download=await pending,path=info.outputPath(`lakeside-close-${mode}.png`);
+    await download.saveAs(path);
+    await info.attach(`lakeside-close-${mode}`,{path,contentType:'image/png'});
+    await page.screenshot({path:info.outputPath(`lakeside-ui-${mode}.png`)});
+    expect(await page.locator('.coordinates').textContent()).toBe(coordinates);
+  }
+  await page.getByRole('button',{name:'数据与来源',exact:true}).click();
+  await expect(page.getByText('立面、屋顶设备和街景构件为推断装饰，并非实测实景。')).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
+test('district lifecycle validates packages, gates groups, cancels stale loads and preserves base details',async({page})=>{
+  await open(page);
+  await page.evaluate(()=>window.mobility.baseline('district',false));
+  const result=await page.evaluate(async()=>{
+    const scene=window.mobility.scene as any, detail=scene.detail;
+    const manifest=await (await fetch('/enhancements/manifest.json')).json();
+    detail.unloadDistrict();
+    const before=detail.resourceCounts();
+    await detail.loadDistrict(manifest);await detail.waitUntilReady();
+    const loaded=detail.resourceCounts();
+    scene.updateSettings({...scene.settings,buildings:false,roads:false,green:false});
+    await detail.waitUntilReady();
+    const hidden=detail.resourceCounts();
+    scene.updateSettings({...scene.settings,buildings:true,roads:true,green:true});
+    await detail.waitUntilReady();
+    const restored=detail.resourceCounts();
+    detail.unloadDistrict();
+    const after=detail.resourceCounts();
+    const native=window.fetch;
+    let release!:(r:Response)=>void;
+    const pendingResponse=await native(`/enhancements/${manifest.placements}`);
+    window.fetch=((input:any,init:any)=>String(input).endsWith(manifest.placements)
+      ? new Promise<Response>(resolve=>{release=resolve;}) : native(input,init)) as typeof fetch;
+    try {
+      const pending=detail.loadDistrict(manifest);
+      await new Promise(r=>setTimeout(r,50));
+      detail.unloadDistrict();release(pendingResponse);
+      await pending;
+    } finally {window.fetch=native;}
+    return {before,loaded,hidden,restored,after,late:detail.resourceCounts()};
+  });
+  expect(result.loaded.models).toBeGreaterThan(0);
+  expect(result.hidden.models).toBe(0);
+  expect(result.restored.models).toBe(result.loaded.models);
+  expect(result.after).toEqual(result.before);
+  expect(result.late).toEqual(result.before);
+  expect(await page.evaluate(()=>window.mobility.errors)).toEqual([]);
+});
+
+test('final nine assets render in Cesium with cardinal orientation and both Walk clips', async ({page},info) => {
+  await open(page);
+  await page.evaluate(()=>window.mobility.assetViews());
+  const measurements=[];
+  for (const kind of ['car-a','car-b','bus','person-a','person-b','tree','lamp','entrance','roof-unit'] as const) {
+    for (const heading of [0,Math.PI/2,Math.PI,Math.PI*1.5]) {
+      await page.evaluate(({kind,heading})=>window.mobility.view(kind,heading),{kind,heading});
+      const result=await page.evaluate(kind=>window.mobility.measure(kind),kind);
+      expect(result.ready).toBe(true);
+      [Math.sin(heading),Math.cos(heading),0].forEach((n,i)=>expect(result.direction[i]).toBeCloseTo(n,5));
+      expect(result.bounds.size.every(n=>n>0)).toBe(true);
+      expect(Math.abs(result.bounds.min[2])).toBeLessThan(0.005);
+      const dimensions = ({ 'car-a':[4.4,1.8,1.45], 'car-b':[4.7,1.9,1.7], bus:[10,2.5,3.1] } as Record<string,number[]>)[kind];
+      if (dimensions) {
+        const [length,width,height]=dimensions;
+        const expected=heading===Math.PI/2 || heading===Math.PI*1.5 ? [length,width,height]:[width,length,height];
+        expected.forEach((n,i)=>expect(result.bounds.size[i]).toBeCloseTo(n,3));
+      }
+      if(kind.startsWith('person-')) expect(result.bounds.size[2]).toBeGreaterThanOrEqual(1.65);
+      const required:Partial<Record<typeof kind,string[]>>={
+        tree:['branch-','leaf-cluster-'],
+        lamp:['anchor-bolt-','tapered-pole','led-module-'],
+        entrance:['door-handle-','transom','threshold'],
+        'roof-unit':['fan-blade-','fan-guard-','service-panel','isolator-'],
+      };
+      for (const prefix of required[kind] ?? []) {
+        expect(Object.keys(result.nodes).some(name=>name.startsWith(prefix)),`${kind}: authored ${prefix}`).toBe(true);
+      }
+      measurements.push({kind,heading,...result});
+    }
+    await capture(page,info,`${kind}-final`);
+    if(kind.startsWith('person-')) {
+      await page.evaluate(()=>window.mobility.phase(0));
+      const neutral=await page.evaluate(kind=>window.mobility.measure(kind),kind);
+      await page.evaluate(()=>window.mobility.phase(0.25));
+      const walking=await page.evaluate(kind=>window.mobility.measure(kind),kind);
+      expect(walking.animations).toEqual(['Walk']);
+      expect(walking.animationDurations).toEqual([1]);
+      expect(walking.limbMatrices).not.toEqual(neutral.limbMatrices);
+      expect(Math.abs(walking.bounds.min[2])).toBeLessThan(0.005);
+      const walkingPixels=await capture(page,info,`${kind}-walk-final`);
+      await page.evaluate(()=>window.mobility.phase(0));
+      const stopped=await page.evaluate(kind=>window.mobility.measure(kind),kind);
+      stopped.limbMatrices.forEach((matrix,i)=>matrix.forEach((value,j)=>
+        expect(value).toBeCloseTo(neutral.limbMatrices[i][j],5)));
+      const stoppedPixels=await capture(page,info,`${kind}-stopped-final`);
+      expect(stoppedPixels!.hash).not.toBe(walkingPixels!.hash);
+      const clock=await page.evaluate(()=>window.mobility.clock());
+      await page.waitForTimeout(100);
+      expect(await page.evaluate(kind=>window.mobility.measure(kind).limbMatrices,kind)).toEqual(stopped.limbMatrices);
+      expect(await capture(page,info,`${kind}-stopped-stable`)).toEqual(stoppedPixels);
+      expect(await page.evaluate(()=>window.mobility.clock())).toBe(clock);
+    }
+  }
+  await writeFile(info.outputPath('nine-assets.json'),JSON.stringify(measurements,null,2));
+  expect(await page.evaluate(()=>window.mobility.errors)).toEqual([]);
+});
+
 async function open(page: Page) {
   await page.goto('/tests/fixtures/mobility.html');
   await page.waitForFunction(() => Boolean(window.mobility));
@@ -16,7 +196,7 @@ async function capture(page: Page, info: TestInfo, name: string) {
   const { bytes, pixels } = await page.evaluate(async (label) => {
     const blob = await window.mobility.capture(label);
     let pixels: { count: number; hash: string; headlamps: number; taillamps: number } | undefined;
-    if (label.startsWith('car-a') || label.startsWith('person-a')) {
+    if (label.startsWith('car-a') || label.startsWith('person-')) {
       const image = await createImageBitmap(blob);
       const canvas = document.createElement('canvas');
       canvas.width = image.width; canvas.height = image.height;
@@ -30,7 +210,9 @@ async function capture(page: Page, info: TestInfo, name: string) {
         const [r, g, b] = rgba.subarray(i * 4, i * 4 + 3);
         mask[i] = Number(label.startsWith('person-a')
           ? r > 60 && r > g * 1.5 && r > b * 1.5
-          : b > 60 && b > r * 1.5 && g > r * 1.2);
+          : label.startsWith('person-b')
+            ? g > 60 && g > r * 1.5 && g > b * 1.05
+            : b > 60 && b > r * 1.5 && g > r * 1.2);
         if (r > 180 && g > 170 && r > g && b < g * 0.95) headlamps++;
         if (r > 80 && r > g * 2 && r > b * 2) taillamps++;
       }
@@ -76,7 +258,8 @@ test('after static detail at original city and district cameras, day and night; 
   expect(await page.evaluate(() => window.mobility.errors)).toEqual([]);
 });
 
-test('static geometry has metre roads, four profile batches, safe accessories and bounded ownership', async ({ page }, info) => {
+test('static geometry has metre roads, native architectural bodies and bounded nonduplicated ownership', async ({ page }, info) => {
+  test.setTimeout(420_000);
   await open(page);
   await page.evaluate(() => window.mobility.baseline('district', false));
   const inspect = () => page.evaluate(() => {
@@ -84,7 +267,6 @@ test('static geometry has metre roads, four profile batches, safe accessories an
     const detail = scene.detail;
     if (!detail) throw new Error('Missing DetailLayer');
     const roads = [...detail.roadRegions.values()] as any[];
-    const tiles = [...scene.tiles.values()] as any[];
     const near = roads.filter(r=>r.near?.ready);
     const accessories = [...detail.tiles.values()].filter((t:any)=>t.primitive?.ready) as any[];
     return {
@@ -96,9 +278,8 @@ test('static geometry has metre roads, four profile batches, safe accessories an
         vertices:t.primitive._va.reduce((n:number,v:any)=>n+v.numberOfVertices,0),
         heights:t.primitive.geometryInstances.map((i:any)=>[i.geometry._height,i.geometry._extrudedHeight]),
         provenance:t.diagnostics})),
-      profileBatches: tiles.flatMap(t=>t.primitives.map((p:any)=>({ready:p.ready,profile:p.appearance.material.uniforms.profile,
-        ids:p._instanceIds.map((id:any)=>({id:id.id,height:id.height,basis:id.basis}))}))),
-      tileCount:tiles.length, loadedIds:[...detail.loadedIds],
+      architecture:window.mobility.architecture.resources(), loadedIds:[...detail.loadedIds],
+      detailedBuildings:([...detail.tiles.values()] as any[]).reduce((n,t)=>n+t.active.size,0),
       farShown:roads.filter(r=>r.overviewVisible).length,
     };
   });
@@ -107,11 +288,11 @@ test('static geometry has metre roads, four profile batches, safe accessories an
   expect(state.near.length).toBeGreaterThan(0);
   expect(state.near.every(r=>r.overview===false && r.vertices>0 && r.widths.every((w:number)=>w>=0.5))).toBe(true);
   expect(new Set(state.near.flatMap(r=>r.ids)).size).toBe(state.near.flatMap(r=>r.ids).length);
-  expect(state.accessories.some(a=>a.count>0 && a.vertices>0)).toBe(true);
-  expect(state.accessories.every(a=>a.heights.every((h:number[])=>h[0]>h[1] && h[1]>0))).toBe(true);
-  expect(state.profileBatches.every(p=>p.ready && p.ids.every((id:any)=>id.id && id.height>0 && id.basis))).toBe(true);
-  expect(new Set(state.profileBatches.map(p=>p.profile)).size).toBe(4);
-  expect(state.tileCount).toBeLessThanOrEqual(8);
+  expect(state.accessories).toHaveLength(0);
+  expect(state.detailedBuildings).toBe(0);
+  expect(state.architecture).toMatchObject({tilesets:1,loading:false});
+  expect(state.architecture.visibleBuildings).toBeGreaterThan(0);
+  expect(state.architecture.bytes).toBeLessThanOrEqual(state.architecture.cacheBytes+state.architecture.maximumCacheOverflowBytes);
   expect(state.farShown).toBeGreaterThan(0);
   const path=info.outputPath('actual-static-geometry.json');
   await writeFile(path,JSON.stringify(state,null,2));
@@ -122,7 +303,7 @@ test('static geometry has metre roads, four profile batches, safe accessories an
     await window.mobility.scene.screenshot();
   });
   const hidden=await inspect();
-  expect(hidden.tileCount).toBe(0);
+  expect(hidden.architecture.visibleBuildings).toBe(0);
   expect(hidden.near.length).toBeGreaterThan(0);
   expect(hidden.accessories).toHaveLength(0);
   for (let i=0;i<10;i++) {
@@ -143,10 +324,12 @@ test('static geometry has metre roads, four profile batches, safe accessories an
       await scene.screenshot();
     }, quality);
     const budgeted = await inspect();
-    expect(budgeted.tileCount).toBeGreaterThan(0);
-    expect(budgeted.tileCount).toBeLessThanOrEqual(limit);
+    expect(budgeted.architecture.visibleBuildings).toBeGreaterThan(0);
+    expect(budgeted.architecture.bytes).toBeLessThanOrEqual(budgeted.architecture.cacheBytes+budgeted.architecture.maximumCacheOverflowBytes);
     expect(budgeted.near.length).toBeGreaterThan(0);
     expect(budgeted.near.length).toBeLessThanOrEqual(limit);
+    expect(budgeted.detailedBuildings).toBe(0);
+    expect(budgeted.resources.models).toBeLessThanOrEqual({low:32,medium:64,high:128}[quality]);
   }
   expect(await page.evaluate(()=>window.mobility.errors)).toEqual([]);
   const final=await page.evaluate(()=>{
@@ -157,31 +340,27 @@ test('static geometry has metre roads, four profile batches, safe accessories an
   expect(final).toEqual({primitives:0,models:0,cacheEntries:0});
 });
 
-test('late aborted tile cannot register profile or accessory resources', async ({ page }) => {
+test('a late architecture manifest cannot publish resources after disposal', async ({ page }) => {
   await open(page);
   const result = await page.evaluate(async () => {
-    const scene = window.mobility.scene as any;
+    const {scene,architecture}=window.mobility;
     await scene.screenshot();
-    const id = scene.manifest.tiles[0].id;
     const nativeFetch = window.fetch;
-    const response = await nativeFetch(`/data/${scene.manifest.dataset}/tiles/${id}.json`);
+    const response = await nativeFetch('/architecture-city/manifest.json');
+    const manifest = await response.clone().json();
     let release!: (response: Response) => void;
-    window.fetch = (() => new Promise<Response>(resolve => { release = resolve; })) as typeof fetch;
-    const before = scene.detail.resourceCounts();
+    window.fetch = (input,init) => String(input)==='/architecture-city/manifest.json'
+      ? new Promise<Response>(resolve => { release = resolve; }) : nativeFetch(input,init);
     try {
-      scene.wanted.add(id);
-      const pending = scene.loadTile(id);
-      const controller = scene.pending.get(id);
-      controller.abort();
-      scene.wanted.delete(id);
+      const pending = architecture.load(manifest.sourceDataset,manifest.buildings);
+      architecture.destroy();
       release(response);
       await pending;
-      return { before, after: scene.detail.resourceCounts(), tiles: scene.tiles.size, pending: scene.pending.size };
+      return architecture.resources();
     } finally { window.fetch = nativeFetch; }
   });
-  expect(result.after).toEqual(result.before);
-  expect(result.tiles).toBe(0);
-  expect(result.pending).toBe(0);
+  expect(result).toMatchObject({tilesets:0,cachedTiles:0,visibleBuildings:0,bytes:0,disposed:true});
+  expect(result.failure).toBeUndefined();
   expect(await page.evaluate(() => window.mobility.errors)).toEqual([]);
 });
 
@@ -223,7 +402,7 @@ test('geometry failure restores real overview attributes, rejects capture prompt
   expect(await page.evaluate(() => window.mobility.errors.join('\n'))).toContain('injected corridor geometry failure');
 });
 
-test('close day and night inspect roof volumes and tessellated metre width', async ({ page }, info) => {
+test('close day and night inspect native roofs and tessellated metre road width', async ({ page }, info) => {
   await open(page);
   await page.evaluate(() => window.mobility.baseline('district', false));
   const evidence = await page.evaluate(async () => {
@@ -247,22 +426,16 @@ test('close day and night inspect roof volumes and tessellated metre width', asy
       const p = Matrix4.multiplyByPoint(inverse, new Cartesian3(positions[i], positions[i+1], positions[i+2]), new Cartesian3());
       cross.push((p.x * -dy + p.y * dx) / length);
     }
-    const tile = ([...detail.tiles.values()] as any[]).find(t => t.primitive?.ready);
-    const roof = tile.primitive.geometryInstances.find((i: any) => i.id.detail === 'roof-access')
-      ?? tile.primitive.geometryInstances[0];
-    const footprint = roof.geometry._polygonHierarchy.positions;
-    const centre = footprint.reduce((sum: any, p: any) => Cartesian3.add(sum, p, sum), new Cartesian3());
-    Cartesian3.divideByScalar(centre, footprint.length, centre);
-    scene.viewer.camera.lookAt(centre, new HeadingPitchRange(0.6, -0.5, 260));
+    scene.viewer.camera.lookAt(midpoint, new HeadingPitchRange(0.6, -0.5, 260));
     scene.viewer.camera.lookAtTransform(Matrix4.IDENTITY);
     await scene.screenshot();
     return { roadId: road.id, width: road.width, measuredWidth: Math.max(...cross) - Math.min(...cross),
-      vertices: positions.length / 3, accessory: roof.id,
-      baseHeight: roof.geometry._extrudedHeight, topHeight: roof.geometry._height };
+      vertices: positions.length / 3, architecture:window.mobility.architecture.resources() };
   });
   expect(evidence.vertices).toBeGreaterThanOrEqual(4);
   expect(evidence.measuredWidth).toBeCloseTo(evidence.width, 1);
-  expect(evidence.topHeight).toBeGreaterThan(evidence.baseHeight);
+  expect(evidence.architecture).toMatchObject({tilesets:1,loading:false});
+  expect(evidence.architecture.near).toBeGreaterThan(0);
   await capture(page, info, 'after-detail-close-day');
   await page.evaluate(() => {
     const scene = window.mobility.scene as any;
@@ -275,7 +448,7 @@ test('close day and night inspect roof volumes and tessellated metre width', asy
   expect(await page.evaluate(() => window.mobility.errors)).toEqual([]);
 });
 
-test('real slice has metre dimensions, ground contact, visible cardinal headings and Walk independent of city clock', async ({ page }, info) => {
+test('published assets have metre dimensions, ground contact, visible cardinal headings and Walk independent of city clock', async ({ page }, info) => {
   const pageErrors: string[] = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
   await open(page);
@@ -341,7 +514,7 @@ test('real slice has metre dimensions, ground contact, visible cardinal headings
 });
 
 test('missing model fails explicitly and promptly, not as a ready scene', async ({ page }) => {
-  await page.route('**/enhancements/slice/car-a.glb', (route) => route.fulfill({ status: 404, body: 'not found' }));
+  await page.route('**/enhancements/*/car-a.glb', (route) => route.fulfill({ status: 404, body: 'not found' }));
   await open(page);
   const error = await page.evaluate(async () => {
     try { await window.mobility.assetViews(); return null; } catch (e) { return String(e); }
@@ -351,8 +524,8 @@ test('missing model fails explicitly and promptly, not as a ready scene', async 
   expect(await page.evaluate(() => window.mobility.errors)).not.toEqual([]);
 });
 
-test('failure of second asset removes the partially loaded slice', async ({ page }) => {
-  await page.route('**/enhancements/slice/person-a.glb', (route) => route.fulfill({ status: 404, body: 'not found' }));
+test('failure of an asset removes the partially loaded package', async ({ page }) => {
+  await page.route('**/enhancements/*/person-a.glb', (route) => route.fulfill({ status: 404, body: 'not found' }));
   await open(page);
   const result = await page.evaluate(async () => {
     try { await window.mobility.assetViews(); } catch { /* Inspect the failed load below. */ }
@@ -364,7 +537,7 @@ test('failure of second asset removes the partially loaded slice', async ({ page
 });
 
 test('stalled asset read rejects within its deadline', async ({ page }) => {
-  await page.route('**/enhancements/slice/car-a.glb', () => {});
+  await page.route('**/enhancements/*/car-a.glb', () => {});
   await open(page);
   const result = await page.evaluate(async () => {
     const started = performance.now();

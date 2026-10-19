@@ -45,6 +45,15 @@ export interface Asset {
   size: [number, number, number];
   animation: string | null;
 }
+export interface Placement {
+  asset: 'tree' | 'lamp' | 'entrance' | 'roof-unit';
+  sourceIds: string[];
+  position: XY;
+  heading: number;
+  height?: number;
+  footprint: Polygon2;
+  inferred: string[];
+}
 export interface EnhancementManifest {
   version: 1;
   id: string;
@@ -185,6 +194,36 @@ function polygon(value: Polygon2): void {
 
 export { polygon as validatePolygon };
 
+export function parsePlacements(value: unknown, assets: Asset[]): Placement[] {
+  array(value, true);
+  for (const item of value) {
+    object(item);
+    const p = item as Placement;
+    check(['tree', 'lamp', 'entrance', 'roof-unit'].includes(p.asset), 'unknown static placement asset');
+    const asset = assets.find(a => a.kind === p.asset);
+    check(asset, 'missing placement asset');
+    strings(p.sourceIds, true);
+    check(p.sourceIds.every(id => /^(node|way|relation)\/[1-9]\d*$/.test(id)), 'invalid placement source');
+    tuple(p.position, 2); finite(p.heading);
+    if (p.height !== undefined) { finite(p.height); check(p.height >= 0, 'invalid placement elevation'); }
+    strings(p.inferred, true); polygon(p.footprint);
+    const s = Math.sin(p.heading), c = Math.cos(p.heading);
+    const corners: XY[] = [];
+    for (const [along, across] of [[-1,-1],[-1,1],[1,1],[1,-1]]) {
+      corners.push([p.position[0] + s*along*asset.size[0]/2 + c*across*asset.size[1]/2,
+        p.position[1] + c*along*asset.size[0]/2 - s*across*asset.size[1]/2]);
+    }
+    for (let i=0;i<4;i++) {
+      const a=corners[i], b=corners[(i+1)%4];
+      check(inside(a,p.footprint[0]) && !p.footprint.slice(1).some(r=>inside(a,r)), 'placement body outside footprint');
+      for (const ring of p.footprint) for(let j=0;j<ring.length-1;j++)
+        check(!intersects(a,b,ring[j],ring[j+1]), 'placement body crosses footprint boundary');
+    }
+    check(!p.footprint.slice(1).some(r=>inside(r[0],[...corners,corners[0]])), 'placement body encloses footprint hole');
+  }
+  return value as Placement[];
+}
+
 export function parseEnhancementManifest(value: unknown, baseDataset: string): EnhancementManifest {
   object(value);
   const m = value as EnhancementManifest;
@@ -206,7 +245,8 @@ export function parseEnhancementManifest(value: unknown, baseDataset: string): E
     check(typeof asset.sha256 === 'string' && /^[a-f0-9]{64}$/.test(asset.sha256), 'invalid SHA-256');
     positive(asset.bytes); check(Number.isSafeInteger(asset.bytes), 'invalid byte count');
     tuple(asset.size, 3); asset.size.forEach(positive);
-    check(asset.animation === null, 'animation declaration requires a validated runtime bounds/clip adapter');
+    check(asset.animation === null || (asset.kind.startsWith('person-') && asset.animation === 'Walk'),
+      'unsupported animation declaration');
   }
   object(m.showcase); geographic(m.showcase.target);
   finite(m.showcase.heading); finite(m.showcase.pitch); positive(m.showcase.range);

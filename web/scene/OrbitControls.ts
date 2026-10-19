@@ -90,14 +90,17 @@ export class OrbitControls {
     const dx = (event.endPosition.x - drag.last.x) / Math.max(canvas.clientWidth, 1);
     const dy = (event.endPosition.y - drag.last.y) / Math.max(canvas.clientHeight, 1);
     Cartesian2.clone(event.endPosition, drag.last);
-    drag.heading = CesiumMath.zeroToTwoPi(drag.heading + dx * CesiumMath.TWO_PI);
+    const heading = CesiumMath.zeroToTwoPi(drag.heading + dx * CesiumMath.TWO_PI);
     const minimumDepression = Math.max(
       CesiumMath.toRadians(5),
       Math.asin(CesiumMath.clamp(this.controller.minimumZoomDistance / drag.range, 0, 1)),
     );
-    drag.pitch = CesiumMath.clamp(
+    const pitch = CesiumMath.clamp(
       drag.pitch - dy * Math.PI, CesiumMath.toRadians(-89.5), -minimumDepression,
     );
+    if (heading === drag.heading && pitch === drag.pitch) return;
+    drag.heading = heading;
+    drag.pitch = pitch;
     camera.lookAt(drag.target, new HeadingPitchRange(drag.heading, drag.pitch, drag.range));
     // Restore world coordinates so native pan, zoom and subsequent flights keep working.
     camera.lookAtTransform(Matrix4.IDENTITY);

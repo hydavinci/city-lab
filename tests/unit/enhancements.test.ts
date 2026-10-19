@@ -7,7 +7,103 @@ import { manifest, network, overpass, routeFixture, publicationFixture, crossing
 import type { Polygon2, XY } from '../../web/core/enhancements';
 import { project, unproject, sweptEnvelope, validateEnvelope } from '../../pipeline/enhancements/geometry';
 import { activeMotorConflict, capacity, compileNetwork } from '../../pipeline/enhancements/routes';
-import { buildEnhancements } from '../../pipeline/enhancements/build';
+import { buildEnhancements, validateGLB } from '../../pipeline/enhancements/build';
+import { continuousBounds } from '../../pipeline/enhancements/animation-bounds';
+
+describe('continuous exported animation certification', () => {
+  it('encloses a rotation extremum strictly between exported keys', () => {
+    const binary=Buffer.alloc(60);
+    const values=[0,0.5,1, ...[-Math.PI/3,Math.PI/3,-Math.PI/3].flatMap(a=>[Math.sin(a/2),0,0,Math.cos(a/2)])];
+    values.forEach((v,i)=>binary.writeFloatLE(v,i*4));
+    const document={
+      buffers:[{byteLength:60}],bufferViews:[{buffer:0,byteLength:12},{buffer:0,byteOffset:12,byteLength:48}],
+      accessors:[{bufferView:0,componentType:5126,type:'SCALAR',count:3},
+        {bufferView:1,componentType:5126,type:'VEC4',count:3},{count:3}],
+      scenes:[{nodes:[0]}],nodes:[{mesh:0}],meshes:[{primitives:[{attributes:{POSITION:2}}]}],
+      animations:[{name:'Walk',channels:[{sampler:0,target:{node:0,path:'rotation'}}],
+        samplers:[{input:0,output:1,interpolation:'LINEAR'}]}],
+    };
+    const proof=continuousBounds(document,binary,[[[0,1,0],[0,0,0],[0.1,0,0]]],'Walk');
+    expect(proof.max[1]).toBeCloseTo(1,6);
+    expect(proof.max[1]).toBeGreaterThan(0.9); // All three key poses have y≈0.5.
+    expect(proof.min[2]).toBeCloseTo(-Math.sqrt(3)/2,6);
+    expect(proof.max[2]).toBeCloseTo(Math.sqrt(3)/2,6);
+    expect(proof.intervals).toBe(2);
+  });
+  it.each(['clip','interpolation','path','matrix','cycle','accessor','non-loop','envelope'])(
+    'rejects uncertifiable %s instead of accepting sampled bounds', failure => {
+      const bytes=publicationFixture().personGlb;
+      const jsonLength=bytes.readUInt32LE(12),doc=JSON.parse(bytes.subarray(20,20+jsonLength).toString());
+      const binary=Buffer.from(bytes.subarray(28+jsonLength));
+      if(failure==='clip') doc.animations[0].name='Idle';
+      if(failure==='interpolation') doc.animations[0].samplers[0].interpolation='CUBICSPLINE';
+      if(failure==='path') doc.animations[0].channels[0].target.path='scale';
+      if(failure==='matrix') doc.nodes[0].matrix=[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1];
+      if(failure==='cycle') doc.nodes[0].children=[0];
+      if(failure==='accessor') doc.accessors[2].count=900;
+      if(failure==='non-loop') binary.writeFloatLE(0.02,80);
+      if(failure==='envelope') binary.writeFloatLE(1,68);
+      const text=JSON.stringify(doc),chunk=Buffer.from(text.padEnd(Math.ceil(text.length/4)*4,' '));
+      const modified=Buffer.alloc(28+chunk.length+binary.length);
+      bytes.copy(modified,0,0,12);modified.writeUInt32LE(modified.length,8);
+      modified.writeUInt32LE(chunk.length,12);modified.writeUInt32LE(0x4e4f534a,16);chunk.copy(modified,20);
+      modified.writeUInt32LE(binary.length,20+chunk.length);modified.writeUInt32LE(0x004e4942,24+chunk.length);
+      binary.copy(modified,28+chunk.length);
+      expect(()=>validateGLB(modified,[0.5,0.5,0.5],'Walk')).toThrow();
+    });
+});
+
+describe('authored final district package', () => {
+  it('rejects malformed placement references, positions, provenance and polygons', async () => {
+    const {parsePlacements}=await import('../../web/core/enhancements');
+    const {assets,placements}=publicationFixture();
+    expect(typeof parsePlacements).toBe('function');
+    const valid=parsePlacements(placements,assets as any);
+    expect(valid).toHaveLength(4);
+    for(const patch of [{asset:'car-a'},{asset:'missing'},{position:[0,NaN]},{heading:Infinity},
+      {sourceIds:[]},{sourceIds:['invented']},{inferred:[]},{footprint:[[[0,0],[1,0],[0,1]]]}]) {
+      expect(()=>parsePlacements([{...placements[0],...patch}],assets as any)).toThrow();
+    }
+  });
+  it('ships nine verified self-contained assets and provenance-backed safe placements', async () => {
+    const { createHash } = await import('node:crypto');
+    const path = 'public/enhancements/manifest.json';
+    const bytes = await readFile(path).catch(() => null);
+    expect(bytes, 'final immutable package must be published').not.toBeNull();
+    const base = JSON.parse(await readFile('public/data/manifest.json', 'utf8'));
+    const final = parseEnhancementManifest(JSON.parse(bytes!.toString()), base.dataset);
+    expect(final.assets.map(a => a.kind).sort()).toEqual(
+      ['car-a','car-b','bus','person-a','person-b','tree','lamp','entrance','roof-unit'].sort());
+    for (const asset of final.assets) {
+      const glb = await readFile(`public/enhancements/${asset.uri}`);
+      expect(glb.length).toBe(asset.bytes);
+      expect(createHash('sha256').update(glb).digest('hex')).toBe(asset.sha256);
+      const doc = JSON.parse(glb.subarray(20,20+glb.readUInt32LE(12)).toString());
+      expect(doc.buffers.every((b: any) => !b.uri)).toBe(true);
+      expect((doc.images ?? []).every((i: any) => !i.uri)).toBe(true);
+      if (asset.kind.startsWith('person-')) {
+        expect(asset.animation).toBe('Walk');
+        expect(doc.animations.map((a: any) => a.name)).toEqual(['Walk']);
+        expect(asset.size[0]).toBeGreaterThan(1.08);
+        expect(asset.size[2]).toBeLessThanOrEqual(1.8);
+      }
+    }
+    const { parsePlacements } = await import('../../web/core/enhancements');
+    const placements = parsePlacements(JSON.parse(await readFile(`public/enhancements/${final.placements}`,'utf8')),final.assets);
+    expect(new Set(placements.map(p => p.asset))).toEqual(new Set(['tree','lamp','entrance','roof-unit']));
+    const network = parseNetwork(JSON.parse(await readFile(`public/enhancements/${final.network}`,'utf8')));
+    for (const p of placements) {
+      expect(p.sourceIds.length).toBeGreaterThan(0);
+      expect(p.inferred.length).toBeGreaterThan(0);
+      validateEnvelope([p.footprint],[p.footprint],[],network.water);
+    }
+    const provenance = JSON.parse(await readFile(`public/enhancements/${final.provenance}`,'utf8'));
+    expect(provenance.capacity.vehicles).toBeGreaterThanOrEqual(20);
+    expect(provenance.capacity.pedestrians).toBeGreaterThanOrEqual(30);
+    expect(provenance.assetBounds['person-a'].method).toContain('continuous');
+    expect(provenance.assetBounds['person-a'].min[1]).toBeGreaterThanOrEqual(-0.000001);
+  });
+});
 
 vi.mock('node:timers/promises', () => ({ setTimeout: async () => {} }));
 
@@ -35,7 +131,7 @@ describe('immutable enhancement publication', () => {
       save(join(options.baseDir,data.base.dataset,'tiles','fixture.json'),data.buildings),
       save(join(options.baseDir,data.base.dataset,'surface.json'),data.surface),
       save(join(options.assetDir,'assets.json'),data.assets),save(join(options.assetDir,'placements.json'),data.placements),
-      ...data.assets.map(a=>writeFile(join(options.assetDir,a.uri),data.glb)),
+      ...data.assets.map(a=>writeFile(join(options.assetDir,a.uri),a.animation?data.personGlb:data.glb)),
     ]);
   });
   afterEach(async () => { await rm(root,{recursive:true,force:true}); });

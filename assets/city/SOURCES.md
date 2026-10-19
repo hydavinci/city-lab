@@ -1,118 +1,83 @@
-# Authored asset slice (Task 3)
+# Authored district assets (Task 5)
 
-These two models are original procedural geometry authored for this project in
-`generate.py`, with an editable `city-assets.blend`. No downloaded models, images,
-textures, fonts, or external resources are used. Materials are embedded glTF PBR
-colours. The source and binaries are a **test-only slice**, not the final nine-asset
-package and not an enhancement manifest.
+All nine models are original procedural geometry from `generate.py`, with editable
+`city-assets.blend`. No downloaded models, textures, images, fonts or external
+resources are used. Embedded glTF PBR colours are shared within each model.
 
-## Rebuild without touching an open Blender file
+## Rebuild and publish
 
-From the repository root, using the verified local Blender 5.2.2 LTS:
+Run an independent background Blender process, never an open interactive file:
 
 ```sh
 /Applications/Blender.app/Contents/MacOS/Blender \
   --background --factory-startup \
-  --python assets/city/generate.py -- --slice --output public/enhancements/slice
+  --python assets/city/generate.py -- --output data/enhancements/staging/assets
+npm run data:enhancements:build
+npm run data:enhancements:build -- --publish
 npm run test:e2e -- tests/e2e/enhancements-visual.spec.ts
 ```
 
-The script requires `--slice` and an explicit output directory; arguments follow
-Blender's `--`. It refuses an interactive Blender process. It saves only its own
-source file and exports each selected hierarchy separately. `inventory.json`
-records byte counts, SHA-256, version, neutral vertex bounds and sampled animated
-bounds. Rebuilding does not publish an enhancement manifest or start a download.
+The generator exports one selected hierarchy at a time, clears selection between
+exports, and writes `assets.json` with hashes, byte counts, source polygon counts,
+neutral bounds and diagnostic sampled bounds. The publisher independently reads
+actual exported geometry and animation bytes; sampled bounds are not its proof.
+No command above downloads geographic data.
 
-## Geometry and animation
+| Kind | Dimensions, length × width × height (m) | Appearance |
+|---|---|---|
+| car-a | 4.4 × 1.8 × 1.45 | Blue sedan, tapered cabin, tires/hubs, front/rear lights |
+| car-b | 4.7 × 1.9 × 1.7 | Copper taller wagon, extended cabin and roof rails |
+| bus | 10 × 2.5 × 3.1 | Cream/green bus, repeated windows, doors and wheels |
+| person-a | Certified envelope 1.12 × 0.601 × 1.8 | Blue clothing, dark hair, articulated limbs |
+| person-b | Certified envelope 1.12 × 0.601 × 1.8 | Different clothing/hair and body proportions |
+| tree | 1.179 × 1.327 × 3.549 | Tapered trunk, root flares, branches and clustered three-tone foliage |
+| lamp | 1.021 × 0.301 × 4.001 | Tapered pole, base bolts, braced arm, service hatch and three LED modules |
+| entrance | 0.401 × 1.821 × 2.201 | Threshold, transom, double glazing, door handles, kickplates and canopy |
+| roof-unit | 2.021 × 1.445 × 1.117 | Raised feet, louvres, twin fan blades/grilles, cabinet panels and service pipes |
 
-- Units are metres. Blender uses Z-up and actor forward **-Y**. Mesh scale and
-  rotation are applied; object translations and limb pivot transforms remain
-  meaningful. Normals are outward, and thin window panels have real thickness.
-- Car: **4.4 × 1.8 × 1.45 m** (length × width × height), footprint-centred root at
-  ground. Bevelled body, tapered cabin, six dark window panels, four tires with
-  alloy hubs, distinct warm front/red rear lights, grille and handles.
-- Person: **1.75 m** neutral height, root on the ground between the feet. Torso,
-  head/face, shoulders, pivoted arms/legs, knees, hands and shoes are geometry, not
-  a billboard. Neutral footprint is about **0.325 × 0.600 m**.
-- One `Walk` clip, **1.000 s**, 24 fps, frames 1–25 exported at times 0–1.
-  Legs alternate ±0.45 rad; arms oppose them at 70% amplitude. Phase 0 is neutral,
-  phases 0.25/0.75 are opposing strides, phase 1 closes the cycle. Root height is
-  sampled each frame to keep the lowest sole at ground. This is a stylized walk,
-  not a foot-locked inverse-kinematics gait.
+Exact declared sizes and immutable bytes are authoritative in
+`public/enhancements/manifest.json`. Static placements are inferred illustrative
+details tied to source ways/building IDs, not surveyed street furniture.
+Static dimensions above round the root-centred published envelopes upward to
+millimetres. The production city automatically loads these four static kinds;
+cars, the bus and people remain inspection assets, not simulated traffic.
 
-## Actual Cesium axis result
+## Continuous Walk certification
 
-Export uses glTF Y-up. Blender `(x,y,z)` becomes glTF `(x,z,-y)`, so actor forward
-is **glTF +Z**. The installed Cesium **1.146.0** default model conversion was
-observed on both real rendered models; it maps glTF `(x,y,z)` to local `(z,x,y)`.
-Its column-major 4×4 matrix is:
+Both people export a one-second `Walk`, 240 fps / 241 keys, with opposing local-X
+limb rotations and root-height translations. A 2 mm sole lift accommodates the
+continuous interpolation enclosure. This stylized gait is not foot-locked IK.
 
-```text
-C = [0,1,0,0,  0,0,1,0,  1,0,0,0,  0,0,0,1]
-```
+The validator accepts only closed, normalized, short-arc local-X quaternion and
+translation LINEAR tracks. Each union-of-key-times interval is enclosed using
+analytic sine/cosine extrema, including interior extrema, then transformed through
+the complete hierarchy. Vertex positions, static matrices/scales and translations
+are included. Unsupported interpolation, scale animation, skins, morphs, external
+resources, extensions, malformed accessors and animation targets are rejected.
 
-Use the **same** additional model rotation for both assets:
+Certified glTF XYZ bounds for person-a:
+`[-0.299999997, 0.000461703, -0.442156836]` to
+`[0.300000004, 1.768641386, 0.541206012]`.
+Person-b has the same horizontal envelope and maximum height `1.778641377`.
+Both fit the root-centred **1.12 × 0.601 m** route envelope. Routes and placements
+were recompiled against base `c8a953228b2ff6af`, not merely relabelled.
+Exported triangle counts and certification results are in package provenance.
 
-```text
-modelMatrix = ENU(origin) × Translation(east,north,height) × Rz(π/2 − heading)
-heading = clockwise radians from north
-effective glTF→ENU rotation = Rz(π/2 − heading) × C
-```
+## Cesium axis convention and evidence
 
-Cesium already applies `C`: do **not** multiply it into `modelMatrix` again. At
-heading zero, the combined rotation maps glTF +Z to north and +Y to up. Browser
-tests measured front-minus-back vectors at headings 0, π/2, π, 3π/2 as north,
-east, south, west respectively, and inspected the corresponding visible nose,
-lights and face. The test-only observer reads the actual scene-graph conversion
-and live named-node matrices, transforming every exported POSITION vertex; it
-does not substitute an alternate renderer. That private observation is pinned to
-the installed Cesium version and fails explicitly if its shape changes.
+Blender units are metres, Z-up, forward -Y. Export produces glTF Y-up, forward +Z.
+The installed Cesium default conversion maps glTF `(x,y,z)` to local `(z,x,y)`.
+Use `ENU(origin) × Translation(east,north,height) × Rz(π/2 − heading)`, with heading
+clockwise from north. **Do not repeat Cesium's built-in conversion.**
 
-## Measured bounds and publication blocker
+Browser tests load all nine actual GLBs at scale 1 without minimum-pixel-size
+boosts, wait for rendered readiness, inspect every POSITION vertex under live
+node transforms, verify cardinal headings and capture pixels. Both Walk clips
+change live limb matrices/pixels and return to stable neutral poses independently
+of the frozen city clock. The private observer is version-pinned to Cesium.
 
-At north heading, real Cesium neutral ENU dimensions:
-
-| Model | East / width | North / length | Up / height | Bounding-sphere radius |
-|---|---:|---:|---:|---:|
-| car-a | 1.800000 | 4.400000 | 1.450000 | 2.485080 |
-| person-a | 0.600000 | 0.325000 | 1.750000 | 0.939165 |
-
-The 25 browser Walk samples, including live root and limb transformations, have
-ENU union bounds relative to the ground root:
-
-```text
-min = [-0.300000005, -0.442156832, -0.000000072]
-max = [ 0.299999997,  0.541206006,  1.766251033]
-```
-
-Minimum ground height across samples is within 0.000000073 m of zero. This is
-sampled evidence, **not a continuous-time bound proof**. The animated footprint
-has length **0.983363 m**, asymmetrically placed around the root; a root-centred
-rectangle covering these samples alone needs length at least **1.082413 m**.
-Therefore the current Task 2 **0.6 × 0.6 m pedestrian envelope does not contain
-this Walk motion**. Neutral dimensions cannot certify dynamic route safety.
-Task 5 must validate continuous animation bounds and either reduce the gait or
-recompile/revalidate routes with a sufficient envelope before publication.
-The parser/compiler's existing animation rejection is deliberately unchanged.
-
-## Browser evidence and limitations
-
-`tests/fixtures/mobility-baseline.json` preserves the original dataset ID,
-selection camera, actual camera vectors, 1600×900/DPR1/medium settings, candidate
-origin, 3 m driving / 2 m walking width snapshot, and original PNG checksums.
-Before actors are explicitly **absent in the original base**. The fixture uses
-those widths for inspection guide lines, not as evidence of route safety.
-
-The browser harness loads `Model.fromGltfAsync` at scale 1, with no minimum-pixel
-size boost, waits for actual rendered readiness with bounded errors, and attaches
-`Walk` only after readiness. It requests model animation phases independently of
-the frozen city time `2026-06-21T04:00:00Z`. Real pixels must contain each actor;
-front/rear lamp colours must be visible; Walk pixels and limb matrices must change;
-the stopped pose's actor-pixel mask and matrices must remain stable after a delay.
-The test-only close-up camera floor is 0.1 m; the production 100 m floor is untouched.
-
-PNG attachments and runtime measurements live in ignored Playwright output
-directories (`artifacts/task-3-*`), never in the public bundle. The two GLBs total
-483,520 bytes before inventory. This slice verifies visual scale and animation,
-not a district simulation, collision safety, final asset budget, or hardware
-performance target.
+Task 3 baseline metadata/screenshots remain unchanged. Its provisional two-GLB
+slice was removed after the harness migrated to the immutable manifest. Evidence
+is in ignored `artifacts/task-5` and Playwright output, never the runtime bundle.
+This package does not implement moving actors, population scheduling or prove
+hardware frame-rate targets; those remain later tasks.

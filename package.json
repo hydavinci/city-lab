@@ -13,6 +13,7 @@
     "data:fetch": "tsx pipeline/fetch.ts",
     "data:enhancements:fetch": "tsx pipeline/enhancements/fetch.ts",
     "data:enhancements:build": "tsx pipeline/enhancements/build.ts",
+    "data:architecture:build": "tsx pipeline/architecture/build.ts",
     "data:build": "tsx pipeline/build.ts"
   },
   "dependencies": {
@@ -33,6 +34,7 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "6.1.2",
+    "meshoptimizer": "1.3.0",
     "tsx": "4.23.15",
     "typescript": "7.0.2",
     "vite": "8.3.4",

@@ -6,16 +6,22 @@ import {
   HeadingPitchRange, BoundingSphere, JulianDate, EllipsoidTerrainProvider, SceneMode,
 } from 'cesium';
 import type { FeatureCollection, Geometry, Position } from 'geojson';
-import type { Bounds, BuildingFeature, BuildingProperties, CityManifest, SceneSettings, SceneStats } from '../core/types';
-import { selectTiles } from '../core/geo';
-import { buildingArea, facadeKind, facadeKinds, type FacadeKind } from '../core/detail';
-import { buildingMaterial, colorMaterial, facadeVertexShader } from './materials';
+import type { BuildingProperties, CityManifest, SceneSettings, SceneStats } from '../core/types';
+import type { SelectedBuilding } from '../core/landmarks';
+import { parseEnhancementManifest } from '../core/enhancements';
+import { colorMaterial } from './materials';
 import { OrbitControls } from './OrbitControls';
 import { DetailLayer } from './DetailLayer';
+import { CityArchitectureLayer } from './CityArchitectureLayer';
 
 export const PLACES = [
   { name: '金鸡湖', sub: '湖畔新城', lng: 120.695, lat: 31.317, range: 6500 },
+  { name: '湖畔街景', sub: '立面与街景细节', lng: 120.6758, lat: 31.3151, range: 420 },
   { name: '姑苏古城', sub: '水巷人家', lng: 120.625, lat: 31.315, range: 4500 },
+  { name: '古城民居', sub: '全城细化 · 坡屋顶与木窗', lng: 120.64196, lat: 31.31118, range: 190 },
+  { name: '住宅街区', sub: '全城细化 · 窗洞与阳台', lng: 120.65027, lat: 31.30999, range: 190 },
+  { name: '办公街区', sub: '全城细化 · 玻璃与竖框', lng: 120.61117, lat: 31.26943, range: 190 },
+  { name: '工业街区', sub: '全城细化 · 厂房与金属屋顶', lng: 120.65628, lat: 31.33305, range: 190 },
   { name: '太湖', sub: '山水之间', lng: 120.365, lat: 31.16, range: 32000 },
   { name: '吴江', sub: '江南水乡', lng: 120.637, lat: 31.138, range: 8500 },
   { name: '昆山', sub: '城东门户', lng: 120.977, lat: 31.385, range: 8500 },
@@ -28,10 +34,9 @@ export const PLACES = [
 
 interface Callbacks {
   onStats: (stats: SceneStats) => void;
-  onSelect: (building: BuildingProperties | null) => void;
+  onSelect: (building: SelectedBuilding | null) => void;
   onError: (message: string) => void;
 }
-interface TileEntry { primitives: Primitive[]; count: number }
 type Layer = 'water' | 'roads' | 'green' | 'boundary';
 
 function ringsOf(geometry: Geometry): Position[][][] {
@@ -61,12 +66,8 @@ export class CityScene {
   private callbacks: Callbacks;
   private layers: Record<Layer, PrimitiveCollection>;
   private labels: LabelCollection;
-  private tiles = new Map<string, TileEntry>();
-  private pending = new Map<string, AbortController>();
-  private failed = new Set<string>();
-  private wanted = new Set<string>();
-  private buildingAppearances: Record<FacadeKind, MaterialAppearance>;
   private detail: DetailLayer;
+  private cityArchitecture: CityArchitectureLayer;
   private handler: ScreenSpaceEventHandler;
   private orbit: OrbitControls;
   private disposed = false;
@@ -79,6 +80,7 @@ export class CityScene {
   private overview = true;
   private renderFailure: Error | null = null;
   private lastReport = '';
+  private districtFailed = false;
 
   constructor(container: HTMLElement, manifest: CityManifest, settings: SceneSettings, callbacks: Callbacks) {
     this.manifest = manifest;
@@ -126,15 +128,16 @@ export class CityScene {
         distanceDisplayCondition: new DistanceDisplayCondition(2500, 400_000),
       });
     }
-    this.buildingAppearances = Object.fromEntries(facadeKinds.map(kind=>[kind,new MaterialAppearance({
-      material: buildingMaterial(settings.night, settings.glow, kind),
-      vertexShaderSource: facadeVertexShader,
-      translucent: false, closed: true, faceForward: true,
-    })])) as Record<FacadeKind, MaterialAppearance>;
     this.detail = new DetailLayer(this.viewer, callbacks.onError);
+    this.cityArchitecture = new CityArchitectureLayer(this.viewer, callbacks.onError);
     this.handler = new ScreenSpaceEventHandler(scene.canvas);
     this.handler.setInputAction((event: { position: Cartesian2 }) => {
       const picked: unknown = scene.pick(event.position);
+      const architecture = this.cityArchitecture.selected(picked);
+      if (architecture) {
+        callbacks.onSelect(architecture);
+        return;
+      }
       if (picked && typeof picked === 'object' && 'id' in picked) {
         const id = picked.id;
         if (id && typeof id === 'object' && 'height' in id && 'basis' in id) {
@@ -147,14 +150,14 @@ export class CityScene {
     }, ScreenSpaceEventType.LEFT_CLICK);
     this.removeMoveListener = this.viewer.camera.moveEnd.addEventListener(() => this.scheduleTiles());
     this.removeErrorListener = scene.renderError.addEventListener((_scene: unknown, error: Error) => {
-      if (!this.renderFailure || this.renderFailure === this.detail.error) this.renderFailure = error;
-      if (this.renderFailure !== this.detail.error) {
+      if (!this.renderFailure || this.renderFailure === this.detail.error
+        || this.renderFailure === this.cityArchitecture.error) this.renderFailure = error;
+      if (this.renderFailure !== this.detail.error && this.renderFailure !== this.cityArchitecture.error) {
         callbacks.onError(`三维渲染失败：${this.renderFailure.message}。请降低画质或刷新页面。`);
       }
     });
     this.readyTimer = setInterval(() => {
-      if (this.pending.size || !this.surfacesReady()
-        || [...this.tiles.values()].some((tile) => tile.primitives.some(p=>!p.ready))) scene.requestRender();
+      if (!this.surfacesReady()) scene.requestRender();
       this.report();
     }, 200);
     this.orbit = new OrbitControls(this.viewer);
@@ -165,6 +168,7 @@ export class CityScene {
 
   async initialize() {
     const path = `/data/${this.manifest.dataset}`;
+    const architecture = this.cityArchitecture.load(this.manifest.dataset, this.manifest.counts.buildings);
     const [boundary, surface] = await Promise.all([
       fetchJSON<FeatureCollection>(`${path}/boundary.json`, this.surfaceAbort.signal),
       fetchJSON<FeatureCollection>(`${path}/surface.json`, this.surfaceAbort.signal),
@@ -174,11 +178,26 @@ export class CityScene {
     this.addSurface(surface);
     this.viewer.scene.requestRender();
     await this.waitForGeometry(false);
+    await Promise.all([this.loadDistrict(), architecture]);
     this.scheduleTiles();
   }
 
-  private surfacesReady(): boolean {
-    return this.detail.ready && Object.values(this.layers).every((layer) => {
+  private async loadDistrict(): Promise<void> {
+    this.districtFailed=false;
+    try {
+      const signal=AbortSignal.any([this.surfaceAbort.signal,AbortSignal.timeout(15_000)]);
+      const raw=await fetchJSON<unknown>('/enhancements/manifest.json',signal);
+      if (this.disposed) return;
+      await this.detail.loadDistrict(parseEnhancementManifest(raw,this.manifest.dataset));
+    } catch (error) {
+      if (this.disposed) return;
+      this.districtFailed=true;
+      this.callbacks.onError(`金鸡湖街景加载失败：${error instanceof Error?error.message:String(error)}。基础城市仍可浏览，可点击“重试加载”。`);
+    }
+  }
+
+  private surfacesReady(includeBuildings = true): boolean {
+    return this.detail.ready && (!includeBuildings || this.cityArchitecture.ready) && Object.values(this.layers).every((layer) => {
       if (!layer.show) return true;
       for (let i = 0; i < layer.length; i++) {
         if (!(layer.get(i) as Primitive).ready) return false;
@@ -190,6 +209,7 @@ export class CityScene {
   private waitForGeometry(includeBuildings: boolean): Promise<void> {
     const signal = this.surfaceAbort.signal;
     const start = performance.now();
+    let lastProgress = start, progress = this.cityArchitecture.progress;
     return new Promise((resolve, reject) => {
       let timer: ReturnType<typeof setTimeout> | undefined;
       const finish = (error?: Error) => {
@@ -203,10 +223,14 @@ export class CityScene {
         if (this.disposed) return cancel();
         if (this.renderFailure) return finish(this.renderFailure);
         if (this.detail.error) return finish(this.detail.error);
-        if (performance.now() - start > 60_000) return finish(new Error('几何资源准备超时，请降低画质或刷新重试。'));
-        const ids = includeBuildings ? [...this.wanted] : [];
-        if (ids.some((id) => this.failed.has(id))) return finish(new Error('部分建筑分块加载失败，请先重试加载再导出。'));
-        if (this.surfacesReady() && ids.every((id) => this.tiles.get(id)?.primitives.every(p=>p.ready))) return finish();
+        if (includeBuildings && this.cityArchitecture.error) return finish(this.cityArchitecture.error);
+        const now = performance.now();
+        if (progress !== this.cityArchitecture.progress) {
+          progress = this.cityArchitecture.progress;
+          lastProgress = now;
+        }
+        if (now - lastProgress > 60_000 || now - start > 600_000) return finish(new Error('几何资源准备超时，请降低画质或刷新重试。'));
+        if (this.surfacesReady(includeBuildings)) return finish();
         this.viewer.scene.requestRender();
         timer = setTimeout(check, 100);
       };
@@ -293,10 +317,6 @@ export class CityScene {
     const scene = this.viewer.scene;
     scene.backgroundColor = Color.fromCssColorString(settings.night ? '#080e17' : '#c4d6df');
     scene.globe.baseColor = Color.fromCssColorString(settings.night ? '#101e23' : '#c1cbbc');
-    for (const appearance of Object.values(this.buildingAppearances)) {
-      appearance.material.uniforms.nightMode = settings.night ? 1 : 0;
-      appearance.material.uniforms.glow = settings.glow;
-    }
     const bloom = scene.postProcessStages.bloom;
     bloom.enabled = settings.night && settings.quality !== 'low' && settings.glow > 0;
     bloom.uniforms.glowOnly = false;
@@ -329,8 +349,8 @@ export class CityScene {
       if (appearance?.material) appearance.material.uniforms.color = Color.fromCssColorString(settings.night ? '#817963' : '#8f907c');
     }
     this.labels.show = settings.labels;
-    for (const tile of this.tiles.values()) for (const p of tile.primitives) p.show = settings.buildings;
     this.detail.update(settings);
+    this.cityArchitecture.update(settings);
     this.scheduleTiles();
     scene.requestRender();
   }
@@ -341,91 +361,22 @@ export class CityScene {
   }
 
   private updateTiles() {
+    clearTimeout(this.timer);
     if (this.disposed) return;
     const viewer = this.viewer;
     this.detail.update(this.settings);
     const altitude = viewer.camera.positionCartographic.height;
     this.overview = altitude > 24000;
-    const view = viewer.camera.computeViewRectangle();
-    const ray = viewer.camera.getPickRay(new Cartesian2(viewer.canvas.clientWidth / 2, viewer.canvas.clientHeight / 2));
-    const hit = ray && viewer.scene.globe.pick(ray, viewer.scene);
-    const focus = hit ? viewer.scene.globe.ellipsoid.cartesianToCartographic(hit) : viewer.camera.positionCartographic;
-    const centre = [CesiumMath.toDegrees(focus.longitude), CesiumMath.toDegrees(focus.latitude)];
-    const bounds: Bounds = view
-      ? [CesiumMath.toDegrees(view.west), CesiumMath.toDegrees(view.south), CesiumMath.toDegrees(view.east), CesiumMath.toDegrees(view.north)]
-      : [centre[0] - 0.03, centre[1] - 0.03, centre[0] + 0.03, centre[1] + 0.03];
-    const limit = { low: 4, medium: 8, high: 14 }[this.settings.quality];
-    const candidates = this.overview || !this.settings.buildings ? [] : selectTiles(this.manifest.tiles, bounds, centre, limit);
-    this.wanted = new Set(candidates.map((tile) => tile.id));
-    for (const [id, controller] of this.pending) {
-      if (!this.wanted.has(id)) controller.abort();
-    }
-    for (const [id, entry] of this.tiles) {
-      if (!this.wanted.has(id)) {
-        entry.primitives.forEach(p=>viewer.scene.primitives.remove(p));
-        this.detail.removeTile(id);
-        this.tiles.delete(id);
-      }
-    }
-    const queue = candidates.filter((tile) => !this.tiles.has(tile.id) && !this.pending.has(tile.id) && !this.failed.has(tile.id));
-    for (const tile of queue.slice(0, Math.max(0, 2 - this.pending.size))) void this.loadTile(tile.id);
     this.report();
-    viewer.scene.requestRender();
-  }
-
-  private async loadTile(id: string) {
-    const controller = new AbortController();
-    this.pending.set(id, controller);
-    const primitives: Primitive[] = [];
-    try {
-      const collection = await fetchJSON<FeatureCollection>(
-        `/data/${this.manifest.dataset}/tiles/${id}.json`, controller.signal,
-      );
-      if (this.disposed || controller.signal.aborted || !this.wanted.has(id)) return;
-      const groups = new Map<FacadeKind,GeometryInstance[]>(facadeKinds.map(kind=>[kind,[]]));
-      for (const feature of collection.features) {
-        const properties = feature.properties as BuildingProperties;
-        const instances = groups.get(facadeKind(properties,buildingArea(feature as BuildingFeature)))!;
-        for (const rings of ringsOf(feature.geometry)) {
-          instances.push(new GeometryInstance({
-            id: properties,
-            geometry: new PolygonGeometry({
-              polygonHierarchy: hierarchy(rings), height: properties.height + 0.5, extrudedHeight: 0.5,
-              vertexFormat: MaterialAppearance.MaterialSupport.TEXTURED.vertexFormat,
-            }),
-          }));
-        }
-      }
-      for (const [kind,instances] of groups) {
-        if (!instances.length) continue;
-        primitives.push(this.viewer.scene.primitives.add(new Primitive({
-          geometryInstances: instances, appearance: this.buildingAppearances[kind], asynchronous: true,
-          releaseGeometryInstances: true, show:this.settings.buildings,
-        })));
-      }
-      this.detail.setTile(id,collection.features as BuildingFeature[]);
-      this.tiles.set(id, { primitives, count: collection.features.length });
-    } catch (error) {
-      primitives.forEach(p=>this.viewer.scene.primitives.remove(p));
-      this.detail.removeTile(id);
-      if (!controller.signal.aborted && !this.disposed) {
-        this.failed.add(id);
-        this.callbacks.onError(`建筑分块 ${id} 加载失败：${error instanceof Error ? error.message : String(error)}。可点击“重试加载”。`);
-      }
-    } finally {
-      this.pending.delete(id);
-      if (!this.disposed) this.scheduleTiles();
-    }
   }
 
   private report() {
     const position = this.viewer.camera.positionCartographic;
-    const ready = [...this.tiles.values()].filter(entry=>entry.primitives.every(p=>p.ready));
-    const visible = ready.filter(entry=>entry.primitives.some(p=>p.show));
+    const resources = this.cityArchitecture.resources();
     const stats: SceneStats = {
-      loadedTiles: visible.length,
-      loadedBuildings: visible.reduce((n, entry) => n + entry.count, 0),
-      loading: this.pending.size > 0 || ready.length < this.tiles.size || !this.surfacesReady(), overview: this.overview,
+      loadedTiles: resources.visibleTiles,
+      loadedBuildings: resources.visibleBuildings,
+      loading: !this.surfacesReady(), overview: this.overview,
       height: position.height,
       longitude: CesiumMath.toDegrees(position.longitude), latitude: CesiumMath.toDegrees(position.latitude),
     };
@@ -438,15 +389,16 @@ export class CityScene {
 
   retry() {
     if (this.renderFailure) {
-      if (this.renderFailure !== this.detail.error) {
+      if (this.renderFailure !== this.detail.error && this.renderFailure !== this.cityArchitecture.error) {
         this.callbacks.onError(`三维渲染失败：${this.renderFailure.message}。请降低画质或刷新页面。`);
         return;
       }
       this.renderFailure = null;
       this.viewer.useDefaultRenderLoop = true;
     }
-    this.failed.clear();
     this.detail.retry();
+    void this.cityArchitecture.retry();
+    if (this.districtFailed) void this.loadDistrict();
     this.scheduleTiles();
   }
 
@@ -487,14 +439,18 @@ export class CityScene {
   }
 
   async screenshot(): Promise<Blob> {
+    if (this.disposed) throw new Error('场景已关闭。');
     if (this.renderFailure) throw this.renderFailure;
     this.updateTiles();
-    await this.detail.waitUntilReady();
     await this.waitForGeometry(true);
-    await this.detail.waitUntilReady();
+    if (this.disposed) throw new Error('场景已关闭。');
     this.viewer.render();
     return new Promise((resolve, reject) => {
-      this.viewer.canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('截图生成失败。')), 'image/png');
+      this.viewer.canvas.toBlob((blob) => {
+        if (this.disposed) reject(new Error('场景已关闭。'));
+        else if (blob) resolve(blob);
+        else reject(new Error('截图生成失败。'));
+      }, 'image/png');
     });
   }
 
@@ -503,14 +459,13 @@ export class CityScene {
     clearTimeout(this.timer);
     clearInterval(this.readyTimer);
     this.surfaceAbort.abort();
-    for (const controller of this.pending.values()) controller.abort();
     this.removeMoveListener();
     this.removeErrorListener();
     window.removeEventListener('resize', this.resizeListener);
     this.handler.destroy();
     this.orbit.destroy();
+    this.cityArchitecture.destroy();
     this.detail.destroy();
-    this.tiles.clear(); this.pending.clear(); this.wanted.clear(); this.failed.clear();
     this.viewer.destroy();
   }
 }

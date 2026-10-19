@@ -1,7 +1,8 @@
 import type { Feature, MultiPolygon, Polygon } from 'geojson';
 
 export type Bounds = [number, number, number, number];
-export type HeightBasis = 'height' | 'levels' | 'fallback';
+export type SourceHeightBasis = 'height' | 'levels' | 'fallback';
+export type HeightBasis = SourceHeightBasis | 'reference';
 export interface BuildingProperties {
   id: string;
   name: string;
@@ -11,6 +12,7 @@ export interface BuildingProperties {
   estimated: boolean;
 }
 export type BuildingFeature = Feature<Polygon | MultiPolygon, BuildingProperties>;
+export type SourceBuildingFeature = Feature<Polygon | MultiPolygon, BuildingProperties & { basis: SourceHeightBasis }>;
 export interface TileInfo {
   id: string;
   bounds: Bounds;

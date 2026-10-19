@@ -1,5 +1,7 @@
 node_modules/
+__pycache__/
 dist/
+public/architecture-city/
 data/raw/
 data/enhancements/staging/
 artifacts/

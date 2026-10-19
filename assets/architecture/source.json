@@ -1,0 +1,306 @@
+{
+  "version": 1,
+  "dataset": "c8a953228b2ff6af",
+  "attribution": "© OpenStreetMap contributors · ODbL 1.0",
+  "inferred": "Source footprints, heights and properties retained; architectural detail is parametric, not surveyed.",
+  "coverage": {
+    "tiles": 616,
+    "buildings": 56459,
+    "counts": {
+      "historic": 7494,
+      "residential": 15069,
+      "office": 17,
+      "commercial": 509,
+      "industrial": 506,
+      "neutral": 32864
+    },
+    "maxMidTriangles": 26342,
+    "maxMidBytes": 2216648,
+    "maxNearTriangles": 39818,
+    "maxNearBytes": 3349836
+  },
+  "buildings": [
+    {
+      "style": "historic",
+      "feature": {
+        "type": "Feature",
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                120.6419434,
+                31.3112148
+              ],
+              [
+                120.6419475,
+                31.311148
+              ],
+              [
+                120.641973,
+                31.3111491
+              ],
+              [
+                120.6419688,
+                31.3112159
+              ],
+              [
+                120.6419434,
+                31.3112148
+              ]
+            ]
+          ]
+        },
+        "properties": {
+          "id": "way/501927117",
+          "name": "",
+          "kind": "yes",
+          "height": 12.8,
+          "basis": "fallback",
+          "estimated": true
+        }
+      },
+      "origin": [
+        120.6419434,
+        31.3112148
+      ],
+      "nearTriangles": 3282,
+      "midTriangles": 358
+    },
+    {
+      "style": "residential",
+      "feature": {
+        "type": "Feature",
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                120.6504768,
+                31.3100462
+              ],
+              [
+                120.6500624,
+                31.310047
+              ],
+              [
+                120.6500621,
+                31.3099256
+              ],
+              [
+                120.6504765,
+                31.3099247
+              ],
+              [
+                120.6504768,
+                31.3100462
+              ]
+            ]
+          ]
+        },
+        "properties": {
+          "id": "way/478990180",
+          "name": "",
+          "kind": "apartments",
+          "height": 12.8,
+          "basis": "fallback",
+          "estimated": true
+        }
+      },
+      "origin": [
+        120.6504768,
+        31.3100462
+      ],
+      "nearTriangles": 12684,
+      "midTriangles": 924
+    },
+    {
+      "style": "office",
+      "feature": {
+        "type": "Feature",
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                120.6107972,
+                31.2695278
+              ],
+              [
+                120.6107989,
+                31.2693355
+              ],
+              [
+                120.6115418,
+                31.2693401
+              ],
+              [
+                120.6115402,
+                31.2695324
+              ],
+              [
+                120.6107972,
+                31.2695278
+              ]
+            ]
+          ]
+        },
+        "properties": {
+          "id": "way/542782795",
+          "name": "",
+          "kind": "government",
+          "height": 12.8,
+          "basis": "fallback",
+          "estimated": true
+        }
+      },
+      "origin": [
+        120.6107972,
+        31.2695278
+      ],
+      "nearTriangles": 12912,
+      "midTriangles": 420
+    },
+    {
+      "style": "commercial",
+      "feature": {
+        "type": "Feature",
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                120.6457275,
+                31.3076751
+              ],
+              [
+                120.6468718,
+                31.3079165
+              ],
+              [
+                120.646842,
+                31.3080196
+              ],
+              [
+                120.6456977,
+                31.3077782
+              ],
+              [
+                120.6457275,
+                31.3076751
+              ]
+            ]
+          ]
+        },
+        "properties": {
+          "id": "way/502015082",
+          "name": "",
+          "kind": "commercial",
+          "height": 10,
+          "basis": "fallback",
+          "estimated": true
+        }
+      },
+      "origin": [
+        120.6457275,
+        31.3076751
+      ],
+      "nearTriangles": 7404,
+      "midTriangles": 600
+    },
+    {
+      "style": "industrial",
+      "feature": {
+        "type": "Feature",
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                120.6557477,
+                31.332839
+              ],
+              [
+                120.6568716,
+                31.3330814
+              ],
+              [
+                120.6568193,
+                31.3332587
+              ],
+              [
+                120.6556953,
+                31.3330165
+              ],
+              [
+                120.6557477,
+                31.332839
+              ]
+            ]
+          ]
+        },
+        "properties": {
+          "id": "way/1309969566",
+          "name": "",
+          "kind": "industrial",
+          "height": 10,
+          "basis": "fallback",
+          "estimated": true
+        }
+      },
+      "origin": [
+        120.6557477,
+        31.332839
+      ],
+      "nearTriangles": 10350,
+      "midTriangles": 610
+    },
+    {
+      "style": "neutral",
+      "feature": {
+        "type": "Feature",
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                120.6499243,
+                31.3101136
+              ],
+              [
+                120.649243,
+                31.3101116
+              ],
+              [
+                120.6492432,
+                31.3100587
+              ],
+              [
+                120.6499245,
+                31.3100607
+              ],
+              [
+                120.6499243,
+                31.3101136
+              ]
+            ]
+          ]
+        },
+        "properties": {
+          "id": "way/504996495",
+          "name": "",
+          "kind": "yes",
+          "height": 12.8,
+          "basis": "fallback",
+          "estimated": true
+        }
+      },
+      "origin": [
+        120.6499243,
+        31.3101136
+      ],
+      "nearTriangles": 9240,
+      "midTriangles": 780
+    }
+  ]
+}

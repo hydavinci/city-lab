@@ -1,7 +1,7 @@
 import type { SceneSettings } from './types';
 
 export const defaultSettings: SceneSettings = {
-  version: 1, night: true, glow: 0.55, quality: 'medium',
+  version: 1, night: true, glow: 0.8, quality: 'medium',
   buildings: true, roads: true, water: true, green: true, boundary: true, labels: true,
 };
 export const SETTINGS_KEY = 'suzhou-city-lab.settings.v1';

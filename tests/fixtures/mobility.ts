@@ -1,14 +1,16 @@
 import {
-  BoundingSphere, Cartesian3, Color, HeadingPitchRange, JulianDate, Matrix3, Matrix4,
+  BoundingSphere, Cartesian2, Cartesian3, Color, HeadingPitchRange, JulianDate, Matrix3, Matrix4,
   Model, ModelAnimationLoop, Transforms, CorridorGeometry,
 } from 'cesium';
 import { CityScene, fetchJSON } from '../../web/scene/CityScene';
+import type { CityArchitectureLayer } from '../../web/scene/CityArchitectureLayer';
 import { defaultSettings } from '../../web/core/settings';
-import type { CityManifest } from '../../web/core/types';
+import type { CityManifest, SceneSettings } from '../../web/core/types';
 import selection from '../../data/enhancements/jinji-lake-selection.json';
 import baselineMetadata from './mobility-baseline.json';
+import { parseEnhancementManifest, type Asset } from '../../web/core/enhancements';
 
-type Kind = 'car-a' | 'person-a';
+type Kind = Asset['kind'];
 type Gltf = {
   scenes: { nodes: number[] }[]; scene?: number;
   nodes: { name: string; mesh?: number; children?: number[] }[];
@@ -24,8 +26,9 @@ declare global {
   interface Window {
     mobility: {
       scene: CityScene; ready: Promise<void>; errors: string[];
-      geometry: { Cartesian3: typeof Cartesian3; Matrix4: typeof Matrix4; Transforms: typeof Transforms;
-        CorridorGeometry: typeof CorridorGeometry; HeadingPitchRange: typeof HeadingPitchRange };
+      architecture: CityArchitectureLayer; settings(): SceneSettings;
+      geometry: { Cartesian2: typeof Cartesian2; Cartesian3: typeof Cartesian3; Matrix4: typeof Matrix4; Transforms: typeof Transforms;
+        CorridorGeometry: typeof CorridorGeometry; HeadingPitchRange: typeof HeadingPitchRange; Model: typeof Model };
       assetViews(): Promise<void>;
       capture(name: string): Promise<Blob>;
       baseline(view: 'city' | 'district', night: boolean): Promise<unknown>;
@@ -151,8 +154,12 @@ function measure(kind: Kind) {
     direction: [direction.x, direction.y, direction.z],
     sphereRadius: asset.model.boundingSphere.radius,
     axisCorrection: Matrix4.toArray(graph.axisCorrectionMatrix),
-    limbMatrices: kind === 'person-a' ? ['left-leg', 'right-leg', 'left-arm', 'right-arm']
-      .map((name) => Matrix4.toArray(asset.model.getNode(name).matrix)) : [],
+    limbMatrices: kind.startsWith('person-') ? ['left-leg', 'right-leg', 'left-arm', 'right-arm']
+      .map((name) => {
+        const exported = asset.gltf.nodes.find(node => new RegExp(`^${name}(?:\\.\\d+)?$`).test(node.name ?? ''));
+        if (!exported?.name) throw new Error(`Missing authored limb ${name}`);
+        return Matrix4.toArray(asset.model.getNode(exported.name).matrix);
+      }) : [],
   };
 }
 
@@ -165,8 +172,10 @@ async function assetViews(): Promise<void> {
     ...defaultSettings, night: false, buildings: false, roads: false, water: false,
     green: false, boundary: false, labels: false,
   });
-  for (const kind of ['car-a', 'person-a'] as const) {
-    const url = `/enhancements/slice/${kind}.glb`;
+  const inventory = parseEnhancementManifest(await fetchJSON('/enhancements/manifest.json'), manifest.dataset);
+  for (const asset of inventory.assets) {
+    const kind=asset.kind;
+    const url = `/enhancements/${asset.uri}`;
     const parsed = await bounded(readGlb(url), `read ${kind}`);
     const position = new Cartesian3(kind === 'car-a' ? -3 : 3, 0, 0);
     let expired = false;
@@ -182,7 +191,7 @@ async function assetViews(): Promise<void> {
       if (performance.now() - started > 20_000) throw new Error(`${kind}: render readiness timed out`);
       await rendered();
     }
-    if (kind === 'person-a') {
+    if (kind.startsWith('person-')) {
       if (!parsed.gltf.animations?.some((animation) => animation.name === 'Walk')) {
         throw new Error(`${kind}: required Walk clip missing`);
       }
@@ -217,9 +226,11 @@ async function view(kind: Kind, heading: number, side = false): Promise<void> {
   for (const [key, asset] of loaded) asset.model.show = key === kind;
   const asset = loaded.get(kind)!;
   asset.model.modelMatrix = matrix(asset.position, heading);
-  const target = Matrix4.multiplyByPoint(enu, Cartesian3.add(asset.position, new Cartesian3(0, 0, kind === 'car-a' ? 0.65 : 0.85), new Cartesian3()), new Cartesian3());
+  const sizes:Record<Kind,number[]>={'car-a':[0.65,9],'car-b':[0.8,10],bus:[1.5,20],
+    'person-a':[0.85,4.5],'person-b':[0.85,4.5],tree:[1.8,8],lamp:[2,9],entrance:[1.1,6],'roof-unit':[0.5,5]};
+  const target = Matrix4.multiplyByPoint(enu, Cartesian3.add(asset.position, new Cartesian3(0, 0, sizes[kind][0]), new Cartesian3()), new Cartesian3());
   scene.viewer.camera.lookAt(target, new HeadingPitchRange(
-    side ? Math.PI / 2 : Math.PI + 0.35, -0.16, kind === 'car-a' ? 9 : 4.5,
+    side ? Math.PI / 2 : Math.PI + 0.35, -0.16, sizes[kind][1],
   ));
   scene.viewer.camera.lookAtTransform(Matrix4.IDENTITY);
   document.getElementById('caption')!.textContent = `${kind} · heading ${Math.round(heading * 180 / Math.PI)}° from N · 1 m grid · phase ${phase.toFixed(2)}`;
@@ -227,7 +238,9 @@ async function view(kind: Kind, heading: number, side = false): Promise<void> {
 }
 
 window.mobility = {
-  geometry: { Cartesian3, Matrix4, Transforms, CorridorGeometry, HeadingPitchRange },
+  architecture: Reflect.get(scene, 'cityArchitecture') as CityArchitectureLayer,
+  settings: () => Reflect.get(scene, 'settings') as SceneSettings,
+  geometry: { Cartesian2, Cartesian3, Matrix4, Transforms, CorridorGeometry, HeadingPitchRange, Model },
   scene, errors, ready: bounded(scene.initialize(), 'base city initialization', 65_000),
   assetViews: async () => {
     try { await assetViews(); }

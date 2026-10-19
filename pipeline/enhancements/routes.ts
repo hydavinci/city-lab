@@ -8,8 +8,8 @@ export const ACTORS: Record<ActorKind, { length: number; width: number; radius: 
   'car-a': { length: 4.4, width: 1.8, radius: 5 },
   'car-b': { length: 4.7, width: 1.9, radius: 5.5 },
   bus: { length: 10, width: 2.5, radius: 10 },
-  'person-a': { length: 0.6, width: 0.6, radius: 0 },
-  'person-b': { length: 0.6, width: 0.6, radius: 0 },
+  'person-a': { length: 1.12, width: 0.601, radius: 0 },
+  'person-b': { length: 1.12, width: 0.601, radius: 0 },
 };
 interface SourceNode { type: 'node'; id: number; lon: number; lat: number; tags?: Record<string,string> }
 interface SourceWay { type: 'way'; id: number; nodes: number[]; tags: Record<string,string> }

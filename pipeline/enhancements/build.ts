@@ -3,11 +3,13 @@ import { mkdir, readFile, writeFile, rename, rm, readdir, lstat } from 'node:fs/
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { FeatureCollection } from 'geojson';
-import { parseEnhancementManifest, parseNetwork } from '../../web/core/enhancements';
+import { parseEnhancementManifest, parseNetwork, parsePlacements } from '../../web/core/enhancements';
 import type { Asset, Diagnostic, EnhancementManifest, Network, Polygon2, XY } from '../../web/core/enhancements';
 import type { CityManifest } from '../../web/core/types';
 import { ACTORS, activeMotorConflict, capacity, compileNetwork, parseSelection } from './routes';
 import { boundsOverlap, polygonBounds, polygonsIntersect, project, rectangle, sweptEnvelope, validateEnvelope } from './geometry';
+import { continuousBounds } from './animation-bounds';
+import { makePlacements } from './placements';
 
 const json = (value: unknown) => Buffer.from(JSON.stringify(value));
 const hash = (value: Buffer) => createHash('sha256').update(value).digest('hex');
@@ -28,7 +30,7 @@ async function ordinaryFile(root: string, path: string): Promise<Buffer> {
   check((await lstat(at)).isFile(), 'Expected regular package file');
   return readFile(at);
 }
-function validateGLB(bytes: Buffer, size: Asset['size']): void {
+export function validateGLB(bytes: Buffer, size: Asset['size'], animation: string | null = null) {
   check(bytes.length >= 24 && bytes.readUInt32LE(0) === 0x46546c67 && bytes.readUInt32LE(4) === 2
     && bytes.readUInt32LE(8) === bytes.length, 'Invalid GLB header/length');
   let at = 12, document: any, binary: Buffer | undefined;
@@ -53,8 +55,8 @@ function validateGLB(bytes: Buffer, size: Asset['size']): void {
     && binary && Number.isSafeInteger(document.buffers[0].byteLength)
     && document.buffers[0].byteLength > 0 && document.buffers[0].byteLength <= binary.length, 'Invalid embedded GLB buffer');
   check(!document.images?.some((image: any) => image.uri), 'External GLB images forbidden');
-  check(!document.extensionsUsed?.length && !document.skins?.length && !document.animations?.length,
-    'Animated/skinned/extended GLB requires a validated runtime bounds adapter before publication');
+  check(!document.extensionsUsed?.length && !document.skins?.length,
+    'Skinned/extended GLB is not supported by the bounds adapter');
   const meshes: number[][][] = [];
   for (const mesh of document.meshes) {
     const positions: number[][] = [];
@@ -116,6 +118,11 @@ function validateGLB(bytes: Buffer, size: Asset['size']): void {
   check(scene && Array.isArray(scene.nodes) && scene.nodes.length, 'Missing GLB default scene');
   for (const id of scene.nodes) visit(id, p => p);
   check(vertices > 0, 'GLB default scene has no geometry');
+  const proof=continuousBounds(document,binary!,meshes,animation);
+  check(proof.min[0]>=-size[1]/2-1e-6 && proof.max[0]<=size[1]/2+1e-6
+    && proof.min[2]>=-size[0]/2-1e-6 && proof.max[2]<=size[0]/2+1e-6
+    && proof.min[1]>=-1e-6 && proof.max[1]<=size[2]+1e-6,`Continuous GLB bounds exceed dimensions: ${JSON.stringify(proof)}`);
+  return proof;
 }
 
 export async function buildEnhancements(options: {
@@ -147,6 +154,7 @@ export async function buildEnhancements(options: {
   const tileIds = new Set<string>();
   const buildings: Polygon2[] = [], water: Polygon2[] = [];
   const footprints = new Map<string, Polygon2[]>();
+  const hosts = new Map<string, {polygons: Polygon2[]; height: number}>();
   const polygons = (collection: FeatureCollection, target: Polygon2[], layer?: string) => {
     for (const f of collection.features) {
       check(f.type === 'Feature' && f.geometry && typeof f.geometry.type === 'string', 'Invalid base feature');
@@ -171,6 +179,7 @@ export async function buildEnhancements(options: {
           const id = String(f.id ?? f.properties?.id);
           check(/^(way|relation)\/[1-9]\d*$/.test(id), 'Building source ID missing');
           footprints.set(id, [...(footprints.get(id) ?? []), local]);
+          hosts.set(id,{polygons:footprints.get(id)!,height:Number(f.properties?.height) || 12});
         }
       }
     }
@@ -210,25 +219,30 @@ export async function buildEnhancements(options: {
   const files = new Map<string, Buffer>([
     ['network.json', json(parseNetwork(network))], ['roads.json', json(roads)], ['provenance.json', json(provenance)],
   ]);
+  const assetBounds: Record<string, ReturnType<typeof validateGLB>> = {};
   for (const asset of assets) {
     check(asset.uri.endsWith('.glb') && !files.has(asset.uri), 'Duplicate/non-GLB asset path');
     const bytes = await ordinaryFile(assetDir, asset.uri);
     check(bytes.length === asset.bytes && hash(bytes) === asset.sha256, `Asset hash/byte mismatch: ${asset.kind}`);
-    validateGLB(bytes, asset.size);
+    check(!asset.kind.startsWith('person-') || asset.animation === 'Walk', 'People require Walk');
+    assetBounds[asset.kind] = validateGLB(bytes, asset.size, asset.animation);
     if (asset.kind in ACTORS) {
       const body = ACTORS[asset.kind as keyof typeof ACTORS];
       check(asset.size[0] <= body.length && asset.size[1] <= body.width, 'Asset exceeds validated actor envelope');
     }
     files.set(asset.uri, bytes);
   }
-  const placements = await readJSON(join(assetDir, 'placements.json'));
-  check(Array.isArray(placements) && placements.length, 'Missing static placements');
   const placed = new Set<string>(), sourceIds = new Set(cache.response.elements.map((e: any) => `${e.type}/${e.id}`));
   const boundary: Polygon2 = [[
     project([selection.bounds[0], selection.bounds[1]], origin), project([selection.bounds[2], selection.bounds[1]], origin),
     project([selection.bounds[2], selection.bounds[3]], origin), project([selection.bounds[0], selection.bounds[3]], origin),
     project([selection.bounds[0], selection.bounds[1]], origin),
   ]];
+  const authored = await readJSON(join(assetDir, 'placements.json')).catch(error=>{
+    if(error.code!=='ENOENT') throw error;
+    return makePlacements(network,assets,hosts,boundary);
+  });
+  const placements = parsePlacements(authored, assets);
   const activeSweeps = network.routes.flatMap(route => {
     const points = route.edges.flatMap((id, i) => {
       const edge = network.edges.find(e => e.id === id)!;
@@ -255,6 +269,7 @@ export async function buildEnhancements(options: {
     if (p.asset === 'entrance' || p.asset === 'roof-unit') {
       const sources = p.sourceIds.flatMap((id: string) => footprints.get(id) ?? []);
       validateEnvelope([p.footprint], sources, [], []);
+      validateEnvelope([p.footprint], [boundary], buildings.filter(b=>!sources.includes(b)), water);
     } else {
       const corridors = network.edges.filter(e => e.sourceIds.some(id => p.sourceIds.includes(id))).flatMap(e => e.corridor);
       validateEnvelope([p.footprint], corridors, buildings, water);
@@ -265,12 +280,16 @@ export async function buildEnhancements(options: {
   check(['tree', 'lamp', 'entrance', 'roof-unit'].every(kind => placed.has(kind)), 'Incomplete static placement kinds');
   files.set('placements.json', json(placements));
   files.set('assets.json', json(assets));
+  files.set('provenance.json', json({...provenance, assetBounds,
+    budget: {limit:30_000_000, newBaseMetadataBytes:8_796_241}}));
   const digest = createHash('sha256').update('district-mobility-v1');
   for (const [path, bytes] of [...files].sort(([a], [b]) => a.localeCompare(b))) digest.update(path).update('\0').update(bytes);
   const id = digest.digest('hex').slice(0, 32);
   const manifest = parseEnhancementManifest({ ...probe, id, network: `${id}/network.json`, roads: `${id}/roads.json`,
     provenance: `${id}/provenance.json`, placements: `${id}/placements.json`,
     assets: assets.map(a => ({ ...a, uri: `${id}/${a.uri}` })) }, base.dataset);
+  check(8_796_241 + json(manifest).length + [...files.values()].reduce((n,b)=>n+b.length,0) <= 30_000_000,
+    'New runtime resources exceed 30 MB budget');
   await mkdir(outputDir, { recursive: true });
   const stage = join(outputDir, `.package-${randomUUID()}`), target = join(outputDir, id);
   const lock = join(outputDir, '.publish-lock');

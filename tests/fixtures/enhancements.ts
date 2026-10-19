@@ -116,9 +116,27 @@ export function publicationFixture() {
   glb.writeUInt32LE(chunk.length,12); glb.writeUInt32LE(0x4e4f534a,16); chunk.copy(glb,20);
   const at=20+chunk.length; glb.writeUInt32LE(36,at); glb.writeUInt32LE(0x004e4942,at+4);
   [-0.25,0,-0.25, 0.25,0,-0.25, -0.25,0.5,0.25].forEach((v,i)=>glb.writeFloatLE(v,at+8+i*4));
+  const animated = structuredClone(document) as any;
+  animated.animations=[{name:'Walk',channels:[{sampler:0,target:{node:0,path:'translation'}}],
+    samplers:[{input:1,output:2,interpolation:'LINEAR'}]}];
+  animated.buffers[0].byteLength=84;
+  animated.bufferViews.push({buffer:0,byteOffset:36,byteLength:12},{buffer:0,byteOffset:48,byteLength:36});
+  animated.accessors.push({bufferView:1,componentType:5126,count:3,type:'SCALAR'},
+    {bufferView:2,componentType:5126,count:3,type:'VEC3'});
+  const animatedText=JSON.stringify(animated), animatedChunk=Buffer.from(animatedText.padEnd(Math.ceil(animatedText.length/4)*4,' '));
+  const personGlb=Buffer.alloc(28+animatedChunk.length+84);
+  glb.copy(personGlb,0,0,12);personGlb.writeUInt32LE(personGlb.length,8);
+  personGlb.writeUInt32LE(animatedChunk.length,12);personGlb.writeUInt32LE(0x4e4f534a,16);animatedChunk.copy(personGlb,20);
+  const bat=20+animatedChunk.length;
+  personGlb.writeUInt32LE(84,bat);personGlb.writeUInt32LE(0x004e4942,bat+4);
+  glb.copy(personGlb,bat+8,at+8);
+  [0,0.5,1, 0,0,0, 0,0,0.01, 0,0,0].forEach((v,i)=>personGlb.writeFloatLE(v,bat+44+i*4));
+  // The synthetic triangle's forward extent leaves room for this tiny looping translation.
+  personGlb.writeFloatLE(0.24,bat+8+32);
   const assets = ['car-a','car-b','bus','person-a','person-b','tree','lamp','entrance','roof-unit'].map(kind=>({
-    kind, uri: `${kind}.glb`, bytes: glb.length, sha256: createHash('sha256').update(glb).digest('hex'),
-    size: [0.5,0.5,0.5], animation: null,
+    kind, uri: `${kind}.glb`, bytes: kind.startsWith('person-')?personGlb.length:glb.length,
+    sha256: createHash('sha256').update(kind.startsWith('person-')?personGlb:glb).digest('hex'),
+    size: [0.5,0.5,0.5], animation: kind.startsWith('person-')?'Walk':null,
   }));
   const placements = [
     {asset:'tree',sourceIds:['way/103'],position:[-100,350.7],footprint:[ring(-100.26,350.44,0.52)]},
@@ -126,7 +144,7 @@ export function publicationFixture() {
     {asset:'entrance',sourceIds:['way/900'],position:[205,205],footprint:[ring(204.5,204.5)]},
     {asset:'roof-unit',sourceIds:['way/900'],position:[210,210],footprint:[ring(209.5,209.5)]},
   ].map(p=>({...p,heading:0,inferred:['synthetic fixture only']}));
-  return { source, selection, base, glb, assets, placements,
+  return { source, selection, base, glb, personGlb, assets, placements,
     buildings: { type: 'FeatureCollection', features: [feature('way/900',200,200,'buildings')] },
     surface: { type: 'FeatureCollection', features: [feature('way/901',250,250,'water')] },
     cache: { response: source, metadata: { bounds: selection.bounds, query: 'synthetic highway fixture',

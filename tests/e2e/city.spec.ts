@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { defaultSettings, encodeSettings } from '../../web/core/settings';
 
 test('serves local Cesium runtime assets rather than the SPA fallback HTML', async ({ request }) => {
   const response = await request.get('/cesium/Assets/approximateTerrainHeights.json');
@@ -46,6 +47,30 @@ test('exports a screenshot and rejects invalid imported configuration', async ({
   await expect(page.getByRole('alert')).toContainText('配置');
 });
 
+test('window glow defaults and resets to 80 while preserving saved and imported choices', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('scene-state')).toHaveText('场景就绪');
+  await expect(page.locator('#glow')).toHaveValue('0.8');
+  await page.getByRole('button', { name: '夜景', exact: true }).click();
+  await page.locator('#glow').fill('0.35');
+  await page.getByRole('button', { name: '保存配置', exact: true }).click();
+  await page.reload();
+  await expect(page.getByTestId('scene-state')).toHaveText('场景就绪');
+  await expect(page.locator('#glow')).toHaveValue('0.35');
+  await page.getByTestId('import-config').setInputFiles({
+    name: 'saved-scene.json', mimeType: 'application/json',
+    buffer: Buffer.from(encodeSettings({ ...defaultSettings, glow: 0.55 })),
+  });
+  await expect(page.locator('#glow')).toHaveValue('0.55');
+  await page.getByRole('button', { name: '数据与来源', exact: true }).click();
+  await page.getByRole('button', { name: '恢复默认', exact: true }).click();
+  await page.getByRole('button', { name: '保存配置', exact: true }).click();
+  await page.reload();
+  await expect(page.getByTestId('scene-state')).toHaveText('场景就绪');
+  await expect(page.locator('#glow')).toHaveValue('0.8');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
 test('explains missing datasets instead of inventing a city', async ({ page }) => {
   await page.route('**/data/manifest.json', (route) => route.fulfill({ status: 404, body: 'Not found' }));
   await page.goto('/');
@@ -53,22 +78,26 @@ test('explains missing datasets instead of inventing a city', async ({ page }) =
   await expect(page.getByRole('alert')).toContainText('data:build');
 });
 
-test('releases near-view building tiles when returning to the full municipality', async ({ page }) => {
+test('keeps source architecture visible when returning to the full municipality', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByTestId('scene-state')).toHaveText('场景就绪');
   await page.getByRole('button', { name: '姑苏古城', exact: true }).click();
   await expect(page.getByTestId('loaded-buildings')).not.toHaveText('0', { timeout: 60_000 });
   await page.getByRole('button', { name: '苏州市全域', exact: true }).click();
-  await expect(page.getByTestId('loaded-buildings')).toHaveText('0');
+  await expect(page.getByTestId('loaded-buildings')).not.toHaveText('0');
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: '导出截图', exact: true }).click();
+  expect((await download).suggestedFilename()).toMatch(/\.png$/);
+  await expect(page.getByTestId('loaded-buildings')).not.toHaveText('0');
 });
 
 test('shows failed building tile requests and allows retry without replacing source data', async ({ page }) => {
-  await page.route('**/tiles/*.json', (route) => route.fulfill({ status: 503, body: 'Temporarily unavailable' }));
+  await page.route('**/architecture-city/**/*.glb', (route) => route.fulfill({ status: 503, body: 'Temporarily unavailable' }));
   await page.goto('/');
   await expect(page.getByTestId('scene-state')).toHaveText('场景就绪');
   await page.getByRole('button', { name: '金鸡湖', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('分块');
-  await page.unroute('**/tiles/*.json');
+  await expect(page.getByRole('alert')).toContainText('全城建筑加载失败');
+  await page.unroute('**/architecture-city/**/*.glb');
   await page.getByRole('button', { name: '重试加载', exact: true }).click();
   await expect(page.getByTestId('loaded-buildings')).not.toHaveText('0', { timeout: 60_000 });
 });

@@ -1,4 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
+import type { Primitive } from 'cesium';
+import type { DetailLayer } from '../../web/scene/DetailLayer';
 
 test.use({ viewport: { width: 1600, height: 900 }, deviceScaleFactor: 1 });
 
@@ -7,6 +9,42 @@ async function open(page: Page) {
   await page.waitForFunction(() => Boolean(window.mobility));
   await page.evaluate(() => window.mobility.baseline('district', false));
 }
+
+test('optional model processing errors do not stop rendering and can be retried', async ({ page }) => {
+  await open(page);
+  const failed = await page.evaluate(async () => {
+    const scene = window.mobility.scene as any, detail = scene.detail;
+    const models = [...detail.districtModels.values()] as any[], model = models[0];
+    const observed = new Promise<void>(resolve => {
+      const remove = model.errorEvent.addEventListener(() => { remove(); resolve(); });
+    });
+    model._resourcesLoaded = false;
+    model._loader.process = () => { throw new Error('injected district loader processing failure'); };
+    scene.viewer.scene.requestRender();
+    await observed;
+    const capture = await Promise.race([
+      scene.screenshot().then((blob: Blob) => blob.size > 0 ? 'png' : 'empty', (error: Error) => error.message),
+      new Promise<string>(resolve => setTimeout(() => resolve('base capture stalled'), 10_000)),
+    ]);
+    return {
+      capture, running: scene.viewer.useDefaultRenderLoop, fatal: Boolean(scene.renderFailure || detail.error),
+      disposed: models.every(model => model.isDestroyed()), remaining: detail.resourceCounts().models,
+      reported: window.mobility.errors.some(error => error.includes('injected district loader processing failure')),
+    };
+  });
+  expect(failed).toEqual({
+    capture: 'png', running: true, fatal: false, disposed: true, remaining: 0, reported: true,
+  });
+  const retried = await page.evaluate(async () => {
+    const scene = window.mobility.scene as any;
+    scene.retry();
+    const capture = await scene.screenshot();
+    return { captured: capture.size > 0, models: scene.detail.resourceCounts().models, ready: scene.detail.ready };
+  });
+  expect(retried.captured).toBe(true);
+  expect(retried.models).toBeGreaterThan(0);
+  expect(retried.ready).toBe(true);
+});
 
 test('Retry recovers an actual detail primitive render error and exports again', async ({ page }) => {
   await open(page);
@@ -89,52 +127,56 @@ for (const detailFirst of [false, true]) {
   });
 }
 
-test('accessory failure from a delayed tile rejects the active screenshot geometry wait promptly', async ({ page }) => {
-  await open(page);
-  await page.evaluate(async () => {
-    const scene = window.mobility.scene as any;
-    scene.updateSettings({ ...scene.settings, buildings: false });
-    await scene.screenshot();
-  });
-  let release!: () => void;
+test('a detail render failure promptly rejects screenshot waiting for delayed native refinement', async ({ page }) => {
+  await page.goto('/tests/fixtures/mobility.html');
+  await page.waitForFunction(() => Boolean(window.mobility));
+  await page.evaluate(() => window.mobility.ready);
+  let release!: () => void, blocked!: () => void;
   const gate = new Promise<void>(resolve => { release = resolve; });
-  await page.route('**/data/*/tiles/*.json', async route => {
+  const requested = new Promise<void>(resolve => { blocked = resolve; });
+  await page.route('**/architecture-city/**/*-near.glb', async route => {
+    blocked();
     await gate;
     await route.continue();
   });
-  await page.evaluate(() => {
-    const scene = window.mobility.scene as any, detail = scene.detail;
-    const error = new Error('injected delayed accessory construction failure');
-    const load = detail.loadAccessories;
-    detail.loadAccessories = () => { throw error; };
-    const state = { waiting: false, outcome: 'pending' };
-    (window as any).detailCapture = state;
-    const wait = scene.waitForGeometry;
-    scene.waitForGeometry = function (includeBuildings: boolean) {
-      state.waiting = includeBuildings;
-      return wait.call(this, includeBuildings);
-    };
-    scene.updateSettings({ ...scene.settings, buildings: true });
-    void scene.screenshot().then(
-      () => { state.outcome = 'unexpected png'; },
-      (cause: Error) => { state.outcome = cause === error ? 'original detail error' : cause.message; },
-    ).finally(() => {
-      detail.loadAccessories = load;
-      scene.waitForGeometry = wait;
+  try {
+    await page.evaluate(() => {
+      Reflect.set(window, 'detailCapture', { outcome: 'pending', error: new Error('injected delayed detail render failure') });
+      const {scene,geometry:{Cartesian3,HeadingPitchRange,Matrix4}}=window.mobility;
+      scene.viewer.camera.lookAt(Cartesian3.fromDegrees(120.6750,31.3124),new HeadingPitchRange(0.6,-0.5,190));
+      scene.viewer.camera.lookAtTransform(Matrix4.IDENTITY);
+      scene.viewer.scene.requestRender();
+      void scene.screenshot().then(
+        () => { Reflect.get(window,'detailCapture').outcome='unexpected png'; },
+        cause => {
+          const state=Reflect.get(window,'detailCapture');
+          state.outcome=cause===state.error ? 'original detail error' : String(cause);
+        },
+      );
     });
-  });
-  await page.waitForFunction(() => {
-    const scene = window.mobility.scene as any;
-    return (window as any).detailCapture.waiting && scene.pending.size > 0;
-  });
-  expect(await page.evaluate(() => (window as any).detailCapture.outcome)).toBe('pending');
-  release();
-  await page.waitForFunction(() => Boolean((window.mobility.scene as any).detail.failure));
-  await expect.poll(() => page.evaluate(() => (window as any).detailCapture.outcome), { timeout: 2000 })
-    .toBe('original detail error');
-  expect(await page.evaluate(() => (window.mobility.scene as any).failed.size)).toBe(0);
+    await requested;
+    await page.waitForFunction(() => {
+      const detail=Reflect.get(window.mobility.scene,'detail') as DetailLayer;
+      const regions=Reflect.get(detail,'roadRegions') as Map<string,{near?:Primitive}>;
+      return [...regions.values()].some(region=>region.near?.ready);
+    });
+    expect(await page.evaluate(() => Reflect.get(window,'detailCapture').outcome)).toBe('pending');
+    expect(await page.evaluate(() => window.mobility.architecture.ready)).toBe(false);
+    await page.evaluate(() => {
+      const {scene}=window.mobility, detail=Reflect.get(scene,'detail') as DetailLayer;
+      const regions=Reflect.get(detail,'roadRegions') as Map<string,{near?:Primitive}>;
+      const primitive=[...regions.values()].find(region=>region.near?.ready)?.near;
+      if(!primitive) throw new Error('Missing ready detail corridor');
+      const error=Reflect.get(window,'detailCapture').error;
+      Reflect.set(primitive,'update',()=>{throw error;});
+      scene.viewer.scene.requestRender();
+    });
+    await expect.poll(() => page.evaluate(() => Reflect.get(window,'detailCapture').outcome), { timeout: 2000 })
+      .toBe('original detail error');
+    expect(await page.evaluate(() => window.mobility.architecture.error)).toBeUndefined();
+  } finally { release(); }
   expect(await page.evaluate(() => window.mobility.errors.join('\n')))
-    .toContain('injected delayed accessory construction failure');
+    .toContain('injected delayed detail render failure');
   expect(await page.evaluate(async () => {
     window.mobility.scene.retry();
     return (await window.mobility.scene.screenshot()).size;
