@@ -248,11 +248,11 @@ test('destroying during native refinement cancels export and late content cannot
   } finally { release(); }
 });
 
-for (const [style, place, coordinates] of [
-  ['historic', '古城民居', /120\.641[0-9].*31\.309[0-9]/],
-  ['residential', '住宅街区', /120\.649[0-9].*31\.308[0-9]/],
-  ['office', '办公街区', /120\.610[0-9].*31\.268[0-9]/],
-  ['industrial', '工业街区', /120\.655[0-9].*31\.331[0-9]/],
+for (const [style, lng, lat, coordinates] of [
+  ['historic', 120.64196, 31.31118, /120\.641[0-9].*31\.309[0-9]/],
+  ['residential', 120.65027, 31.30999, /120\.649[0-9].*31\.308[0-9]/],
+  ['office', 120.61117, 31.26943, /120\.610[0-9].*31\.268[0-9]/],
+  ['industrial', 120.65628, 31.33305, /120\.655[0-9].*31\.331[0-9]/],
 ] as const) {
   test(`main page exports actual ${style} district close views in daylight and at night`, async ({ page }, info) => {
     const errors: string[] = [];
@@ -260,7 +260,9 @@ for (const [style, place, coordinates] of [
     await page.goto('/');
     await expect(page.getByTestId('scene-state')).toHaveText('场景就绪');
     await expect(page.getByRole('button', { name: '古城精细街区', exact: true })).toHaveCount(0);
-    await page.getByRole('button', { name: place, exact: true }).click();
+    await page.addScriptTag({ type: 'module', url: '/tests/fixtures/landmark-review.ts' });
+    await page.waitForFunction(() => Boolean(window.landmarkReview));
+    expect(await page.evaluate(({ lng, lat }) => window.landmarkReview.location(lng, lat, 190), { lng, lat })).toBeGreaterThan(0);
     await expect(page.locator('.coordinates')).toHaveText(coordinates);
     await expect(page.locator('#glow')).toHaveValue('0.8');
     await mkdir('artifacts/unified-city', { recursive: true });

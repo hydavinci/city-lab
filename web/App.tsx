@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { FeatureCollection } from 'geojson';
-import { CityScene, fetchJSON, PLACES } from './scene/CityScene';
+import { CityScene, fetchJSON, PLACES, type PlaceGroup } from './scene/CityScene';
 import { defaultSettings, encodeSettings, parseSettings, SETTINGS_KEY } from './core/settings';
 import type { CityManifest, SceneSettings, SceneStats } from './core/types';
 import type { SelectedBuilding } from './core/landmarks';
@@ -84,6 +84,7 @@ export function App() {
   const [notice, setNotice] = useState('');
   const [selected, setSelected] = useState<SelectedBuilding | null>(null);
   const [place, setPlace] = useState('苏州市全域');
+  const [placeGroup, setPlaceGroup] = useState<PlaceGroup>('district');
   const [tab, setTab] = useState<'scene' | 'data'>('scene');
   const [help, setHelp] = useState(false);
   const [panel, setPanel] = useState(true);
@@ -256,8 +257,11 @@ export function App() {
           <section className="panel-section">
             <div className="section-title"><span><MapPin size={15} /> 城市漫游</span><span className="tiny-label">EXPLORE</span></div>
             <button className={`city-wide ${place === '苏州市全域' ? 'selected' : ''}`} onClick={home}><span><Scan size={18} /><span>苏州市全域<small>完整行政范围 · 非局部示意</small></span></span><ArrowUpRight size={16} /></button>
-            <div className="place-grid">{PLACES.map((item, index) => <button key={item.name} aria-label={item.name} className={`place-card ${place === item.name ? 'selected' : ''}`} onClick={() => locate(item.name)}>
-              <span className="place-index">{String(index + 1).padStart(2, '0')}</span><strong>{item.name}</strong><small>{item.sub}</small>{place === item.name && <i />}
+            <div className="segmented place-groups" role="group" aria-label="漫游分类">
+              {([['district', '行政区域'], ['attraction', '重点景点']] as const).map(([group, label]) => <button key={group} className={placeGroup === group ? 'active' : ''} aria-pressed={placeGroup === group} onClick={() => setPlaceGroup(group)}>{label}</button>)}
+            </div>
+            <div className="place-grid">{PLACES.filter(item => item.group === placeGroup).map(item => <button key={item.name} aria-label={item.name} aria-pressed={place === item.name} className={`place-card ${place === item.name ? 'selected' : ''}`} onClick={() => locate(item.name)}>
+              <strong>{item.name}</strong><small>{item.sub}</small>{place === item.name && <i />}
             </button>)}</div>
           </section>
           <section className="panel-section">
@@ -270,7 +274,7 @@ export function App() {
           <section className="panel-section">
             <div className="section-title"><span><SlidersHorizontal size={15} /> 渲染质量</span><span className="tiny-label">QUALITY</span></div>
             <div className="segmented">{([['low', '流畅'], ['medium', '均衡'], ['high', '精细']] as const).map(([value, text]) => <button key={value} className={settings.quality === value ? 'active' : ''} aria-pressed={settings.quality === value} onClick={() => update('quality', value)}>{text}</button>)}</div>
-            <p className="section-note">全城已有建筑按类型细化，靠近后加载窗洞、屋顶和立面构件。可从古城民居、住宅、办公或工业街区进入近景；原 45 栋古城样板继续保留。画质控制细节数量，远景自动简化。</p>
+            <p className="section-note">靠近后自动加载屋顶、窗洞和立面细节，无需按建筑类型选择入口。画质控制细节数量，远景自动简化。</p>
           </section>
         </> : <>
           <section className="panel-section">

@@ -65,12 +65,12 @@ test('optional district asset corruption preserves the base city and can be retr
   expect(await page.evaluate(()=>(window.mobility.scene as any).detail.resourceCounts().models)).toBeGreaterThan(0);
 });
 
-test('main page exposes a close lakeside view with exportable day and night detail',async({page},info)=>{
+test('main page retains close lakeside detail without a separate roaming destination',async({page},info)=>{
   await page.goto('/');
   await expect(page.getByTestId('scene-state')).toHaveText('场景就绪');
-  const preset=page.getByRole('button',{name:'湖畔街景',exact:true});
-  await expect(preset).toBeVisible();
-  await preset.click();
+  await page.addScriptTag({type:'module',url:'/tests/fixtures/landmark-review.ts'});
+  await page.waitForFunction(()=>Boolean(window.landmarkReview));
+  expect(await page.evaluate(()=>window.landmarkReview.location(120.6758,31.3151,420))).toBeGreaterThan(0);
   await expect(page.getByTestId('loaded-buildings')).not.toHaveText('0');
   await expect(page.locator('.coordinates')).toHaveText(/120\.6750.*31\.3124/);
   const coordinates=await page.locator('.coordinates').textContent();

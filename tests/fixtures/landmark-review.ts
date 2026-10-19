@@ -36,6 +36,7 @@ function definition(id: string) {
 }
 
 const review = {
+  scene: mainScene,
   state: () => architecture().resources(),
   lods(id: string): string[] {
     const record = definition(id), visible: unknown = Reflect.get(architecture(), 'visible');
@@ -64,6 +65,14 @@ const review = {
   },
   async ready() {
     return (await mainScene().screenshot()).size;
+  },
+  async location(lng: number, lat: number, range: number) {
+    const scene = mainScene();
+    scene.viewer.camera.lookAt(Cartesian3.fromDegrees(lng, lat),
+      new HeadingPitchRange(15 * Math.PI / 180, -42 * Math.PI / 180, range));
+    scene.viewer.camera.lookAtTransform(Matrix4.IDENTITY);
+    scene.viewer.scene.requestRender();
+    return (await scene.screenshot()).size;
   },
   pickPoint(id: string) {
     const record = definition(id), [west, south, east, north] = record.bounds;

@@ -14,22 +14,27 @@ import { OrbitControls } from './OrbitControls';
 import { DetailLayer } from './DetailLayer';
 import { CityArchitectureLayer } from './CityArchitectureLayer';
 
-export const PLACES = [
-  { name: '金鸡湖', sub: '湖畔新城', lng: 120.695, lat: 31.317, range: 6500 },
-  { name: '湖畔街景', sub: '立面与街景细节', lng: 120.6758, lat: 31.3151, range: 420 },
-  { name: '姑苏古城', sub: '水巷人家', lng: 120.625, lat: 31.315, range: 4500 },
-  { name: '古城民居', sub: '全城细化 · 坡屋顶与木窗', lng: 120.64196, lat: 31.31118, range: 190 },
-  { name: '住宅街区', sub: '全城细化 · 窗洞与阳台', lng: 120.65027, lat: 31.30999, range: 190 },
-  { name: '办公街区', sub: '全城细化 · 玻璃与竖框', lng: 120.61117, lat: 31.26943, range: 190 },
-  { name: '工业街区', sub: '全城细化 · 厂房与金属屋顶', lng: 120.65628, lat: 31.33305, range: 190 },
-  { name: '太湖', sub: '山水之间', lng: 120.365, lat: 31.16, range: 32000 },
-  { name: '吴江', sub: '江南水乡', lng: 120.637, lat: 31.138, range: 8500 },
-  { name: '昆山', sub: '城东门户', lng: 120.977, lat: 31.385, range: 8500 },
-  { name: '常熟', sub: '虞山城郭', lng: 120.749, lat: 31.655, range: 8500 },
-  { name: '张家港', sub: '江畔港城', lng: 120.554, lat: 31.877, range: 10000 },
-  { name: '太仓', sub: '江海交汇', lng: 121.124, lat: 31.459, range: 8500 },
-  { name: '相城', sub: '城北新貌', lng: 120.642, lat: 31.371, range: 8500 },
-  { name: '虎丘', sub: '山塘寻迹', lng: 120.566, lat: 31.33, range: 6500 },
+export type PlaceGroup = 'district' | 'attraction';
+
+export const PLACES: readonly {
+  name: string; sub: string; group: PlaceGroup; lng: number; lat: number; range: number;
+}[] = [
+  { name: '姑苏区', sub: '古城核心', group: 'district', lng: 120.625, lat: 31.315, range: 8500 },
+  { name: '虎丘区', sub: '苏州高新区', group: 'district', lng: 120.566, lat: 31.33, range: 10000 },
+  { name: '吴中区', sub: '吴中山水', group: 'district', lng: 120.628, lat: 31.266, range: 10000 },
+  { name: '相城区', sub: '城北新貌', group: 'district', lng: 120.642, lat: 31.371, range: 8500 },
+  { name: '吴江区', sub: '江南水乡', group: 'district', lng: 120.637, lat: 31.138, range: 8500 },
+  { name: '苏州工业园区', sub: '功能区 · 湖东新城', group: 'district', lng: 120.73, lat: 31.325, range: 10000 },
+  { name: '昆山市', sub: '城东门户', group: 'district', lng: 120.977, lat: 31.385, range: 8500 },
+  { name: '常熟市', sub: '虞山城郭', group: 'district', lng: 120.749, lat: 31.655, range: 8500 },
+  { name: '张家港市', sub: '江畔港城', group: 'district', lng: 120.554, lat: 31.877, range: 10000 },
+  { name: '太仓市', sub: '江海交汇', group: 'district', lng: 121.124, lat: 31.459, range: 8500 },
+  { name: '金鸡湖', sub: '湖畔天际线', group: 'attraction', lng: 120.695, lat: 31.317, range: 6500 },
+  { name: '拙政园', sub: '江南园林', group: 'attraction', lng: 120.625, lat: 31.324, range: 1500 },
+  { name: '虎丘山', sub: '古塔名胜', group: 'attraction', lng: 120.5764, lat: 31.338, range: 1800 },
+  { name: '同里古镇', sub: '小桥流水', group: 'attraction', lng: 120.7161, lat: 31.1598, range: 2500 },
+  { name: '周庄古镇', sub: '水乡古韵', group: 'attraction', lng: 120.8456, lat: 31.1147, range: 2500 },
+  { name: '太湖', sub: '山水之间', group: 'attraction', lng: 120.365, lat: 31.16, range: 32000 },
 ];
 
 interface Callbacks {
@@ -119,13 +124,17 @@ export class CityScene {
     };
     this.labels = scene.primitives.add(new LabelCollection());
     for (const place of PLACES) {
+      const district = place.group === 'district';
       this.labels.add({
         position: Cartesian3.fromDegrees(place.lng, place.lat, 30), text: place.name,
-        font: '13px sans-serif', fillColor: Color.fromCssColorString('#c8e4df'),
+        font: district ? '13px sans-serif' : '12px sans-serif',
+        fillColor: Color.fromCssColorString(district ? '#c8e4df' : '#e8ce9b'),
         outlineColor: Color.fromCssColorString('#0b1820'), outlineWidth: 3,
         style: LabelStyle.FILL_AND_OUTLINE,
         verticalOrigin: VerticalOrigin.BOTTOM, pixelOffset: new Cartesian2(0, -12),
-        distanceDisplayCondition: new DistanceDisplayCondition(2500, 400_000),
+        distanceDisplayCondition: district
+          ? new DistanceDisplayCondition(6000, 400_000)
+          : new DistanceDisplayCondition(100, 40_000),
       });
     }
     this.detail = new DetailLayer(this.viewer, callbacks.onError);

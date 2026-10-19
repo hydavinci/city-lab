@@ -20,6 +20,7 @@ test('renders a local city without hosted services and supports scene controls',
   await expect(page.getByRole('heading', { name: '苏州' })).toBeVisible();
   await expect(page.getByTestId('scene-state')).toHaveText('场景就绪');
   await expect(page.locator('.cesium-widget canvas')).toBeVisible();
+  await page.getByRole('button', { name: '重点景点', exact: true }).click();
   await page.getByRole('button', { name: '金鸡湖', exact: true }).click();
   await expect(page.getByTestId('loaded-buildings')).not.toHaveText('0', { timeout: 60_000 });
   await page.getByRole('button', { name: '日景', exact: true }).click();
@@ -81,7 +82,7 @@ test('explains missing datasets instead of inventing a city', async ({ page }) =
 test('keeps source architecture visible when returning to the full municipality', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByTestId('scene-state')).toHaveText('场景就绪');
-  await page.getByRole('button', { name: '姑苏古城', exact: true }).click();
+  await page.getByRole('button', { name: '姑苏区', exact: true }).click();
   await expect(page.getByTestId('loaded-buildings')).not.toHaveText('0', { timeout: 60_000 });
   await page.getByRole('button', { name: '苏州市全域', exact: true }).click();
   await expect(page.getByTestId('loaded-buildings')).not.toHaveText('0');
@@ -95,6 +96,7 @@ test('shows failed building tile requests and allows retry without replacing sou
   await page.route('**/architecture-city/**/*.glb', (route) => route.fulfill({ status: 503, body: 'Temporarily unavailable' }));
   await page.goto('/');
   await expect(page.getByTestId('scene-state')).toHaveText('场景就绪');
+  await page.getByRole('button', { name: '重点景点', exact: true }).click();
   await page.getByRole('button', { name: '金鸡湖', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('全城建筑加载失败');
   await page.unroute('**/architecture-city/**/*.glb');

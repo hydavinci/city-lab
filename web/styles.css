@@ -109,13 +109,13 @@ input[type="range"]:disabled { opacity: .3; }
 .city-wide > span { display: flex; align-items: center; gap: 11px; font-size: 11px; }
 .city-wide small { display: block; font-size: 8px; color: #6f8989; margin-top: 5px; }
 .city-wide.selected { background: #20332d; border-color: #637c5e; }
+.place-groups { margin-bottom: 10px; }
 .place-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
-.place-card { position: relative; min-height: 60px; padding: 11px; border: 1px solid #26333d; border-radius: 4px; text-align: left; background: #151e27; }
+.place-card { position: relative; min-height: 52px; padding: 10px; border: 1px solid #26333d; border-radius: 4px; text-align: left; background: #151e27; }
 .place-card:hover { border-color: #567563; background: #1e2d2c; }
 .place-card.selected { border-color: #8aa875; background: #25372d; }
 .place-card strong { display: block; font-size: 11px; font-weight: 500; color: #c1d0ce; }
 .place-card small { display: block; font-size: 8px; letter-spacing: .5px; color: #667d85; margin-top: 5px; }
-.place-index { position: absolute; top: 12px; right: 10px; font-family: monospace; font-size: 8px; color: #45606b; }
 .place-card i { position: absolute; right: 10px; bottom: 11px; height: 4px; width: 4px; background: var(--mint); border-radius: 50%; }
 .layer-list { display: grid; gap: 17px; }
 .layer-row { display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: #9cafb7; }
