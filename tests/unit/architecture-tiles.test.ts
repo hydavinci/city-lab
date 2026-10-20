@@ -26,6 +26,40 @@ const temporary: string[] = [];
 afterEach(async () => { await Promise.all(temporary.splice(0).map(path => rm(path, { recursive: true, force: true }))); });
 
 describe('persistent architecture tiles', () => {
+  it('bounds generic reference towers at every level and publishes their count without altering OSM', async () => {
+    const tile = JSON.parse(await readFile('public/data/c8a953228b2ff6af/tiles/4828_1253.json', 'utf8')) as {
+      features: BuildingFeature[];
+    };
+    const features = [tile.features.find(feature => feature.properties.id === 'way/802754584')!];
+    const text = JSON.stringify({ type: 'FeatureCollection', features });
+    const root = await mkdtemp(join(tmpdir(), 'reference-height-'));
+    temporary.push(root);
+    const inputDir = join(root, 'input'), outputDir = join(root, 'output');
+    await mkdir(join(inputDir, 'source', 'tiles'), { recursive: true });
+    await writeFile(join(inputDir, 'manifest.json'), JSON.stringify({
+      version: 1, dataset: 'source', counts: { buildings: 1 }, tiles: [{ id: 'tower', count: 1 }],
+    }));
+    const sourcePath = join(inputDir, 'source', 'tiles', 'tower.json');
+    await writeFile(sourcePath, text);
+    const result = await buildCityArchitecture({ inputDir, outputDir });
+    expect(result.heightReferences).toEqual({ provider: 'verified-building-heights-v1', buildings: 1 });
+    expect(parseCityArchitectureManifest(result, 'source', 1)).toEqual(result);
+    for (const value of [0, 2, 1.5]) {
+      expect(() => parseCityArchitectureManifest({
+        ...result, heightReferences: { ...result.heightReferences, buildings: value },
+      }, 'source', 1)).toThrow(/height reference/i);
+    }
+    const tileset = JSON.parse(await readFile(join(outputDir, result.tileset), 'utf8')) as {
+      root: { boundingVolume: { region: number[] }; children?: typeof tileset.root[] };
+    };
+    const visit = (node: typeof tileset.root) => {
+      expect(node.boundingVolume.region[5]).toBeGreaterThan(303.66);
+      node.children?.forEach(visit);
+    };
+    visit(tileset.root);
+    expect(await readFile(sourcePath, 'utf8')).toBe(text);
+  });
+
   it('publishes a separate attraction with source accounting and refuses duplicate source identities', async () => {
     const sourceDataset = 'c8a953228b2ff6af';
     const tile = JSON.parse(await readFile(`public/data/${sourceDataset}/tiles/4826_1252.json`, 'utf8')) as {

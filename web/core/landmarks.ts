@@ -1,5 +1,6 @@
 import type { Bounds, BuildingFeature, BuildingProperties } from './types';
 import { jinjiLandmarks } from './jinji-landmarks';
+import type { HeightReference } from './building-heights';
 
 export type SkylineFamily = 'global' | 'fortune' | 'phoenix' | 'center' | 'hong-leong' | 'media' | 'media-wing';
 
@@ -21,6 +22,7 @@ export interface LandmarkDefinition extends LandmarkModel {
 
 export interface SelectedBuilding extends BuildingProperties {
   model?: LandmarkModel;
+  heightReference?: HeightReference;
 }
 
 export interface ArchitectureExclusion {

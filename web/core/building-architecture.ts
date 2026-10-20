@@ -3,6 +3,7 @@ import { projectRings, roofPatches, roofPoint, wallEdges, type WallEdge, type XY
 import { cityStyle, type CityLod, type CityStyle } from './city-architecture';
 import type { BuildingFeature, BuildingProperties } from './types';
 import { emitLandmark } from './landmark-architecture';
+import { referenceHeightFor } from './building-heights';
 
 export interface GeneratedArchitecture {
   bytes: ArrayBuffer;
@@ -173,14 +174,17 @@ function roof(mesh: ArchitectureMeshWriter, patch: XY[], top: number, rise: numb
 }
 
 export function emitArchitecture(mesh: ArchitectureMeshWriter, feature: BuildingFeature, lod: ArchitectureLod, anchor?: XY) {
-  const height = feature.properties.height;
-  if (!Number.isFinite(height) || height <= 0) throw new Error(`Invalid architecture height: ${feature.properties.id}`);
+  if (!Number.isFinite(feature.properties.height) || feature.properties.height <= 0) {
+    throw new Error(`Invalid architecture height: ${feature.properties.id}`);
+  }
   const source = feature.geometry.type === 'Polygon' ? [feature.geometry.coordinates] : feature.geometry.coordinates;
   const first = source[0]?.[0]?.[0];
   if (!first || first.length < 2) throw new Error(`Empty architecture footprint: ${feature.properties.id}`);
-  const origin: XY = anchor ?? [first[0], first[1]], style = cityStyle(feature), near = lod === 'near';
+  const origin: XY = anchor ?? [first[0], first[1]], near = lod === 'near';
   const landmark = emitLandmark(mesh, feature, lod, origin);
-  if (landmark) return landmark;
+  if (landmark) return { ...landmark, heightReference: undefined };
+  const heightReference = referenceHeightFor(feature), height = heightReference?.height ?? feature.properties.height;
+  const style = cityStyle(heightReference ? { ...feature, properties: { ...feature.properties, height } } : feature);
   const polygons = source.map(p => projectRings(p, origin));
   const edges = polygons.flatMap(wallEdges), patches = polygons.flatMap(roofPatches);
   let seed = 2166136261;
@@ -208,13 +212,13 @@ export function emitArchitecture(mesh: ArchitectureMeshWriter, feature: Building
     roof(mesh, patch, top, rise, style, near, Math.min(1, 180 / Math.max(1, totalLength)));
     mesh.face([...patch].reverse().map(([x, y]): XYZ => [x, y, 0.5]), STONE);
   }
-  return { origin, style, materials: materials(style, seed), model: undefined };
+  return { origin, style, materials: materials(style, seed), model: undefined, heightReference };
 }
 
 export function buildArchitecture(feature: BuildingFeature, lod: CityLod): GeneratedArchitecture {
   const mesh = new ArchitecturalMesh();
-  const { origin, style, materials, model } = emitArchitecture(mesh, feature, lod);
-  const bytes = mesh.finish(materials, feature.properties, model);
+  const { origin, style, materials, model, heightReference } = emitArchitecture(mesh, feature, lod);
+  const bytes = mesh.finish(materials, feature.properties, model, heightReference);
   if (mesh.triangles > 45_000 || bytes.byteLength > 4 * 1024 * 1024) {
     throw new Error(`Architecture body exceeds its geometry budget: ${feature.properties.id} (${mesh.triangles} triangles).`);
   }

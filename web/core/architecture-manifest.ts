@@ -12,6 +12,7 @@ export interface ArchitectureManifest {
   sourceBuildings?: number;
   exclusions?: ArchitectureExclusion[];
   additions?: ArchitectureAddition[];
+  heightReferences?: { provider: string; buildings: number };
   lods: Record<'far' | 'mid' | 'near', {
     buildings: number; tiles: number; triangles: number; bytes: number; decodedBytes: number;
   }>;
@@ -48,6 +49,13 @@ export function parseCityArchitectureManifest(input: unknown, sourceDataset: str
     sourceBuildings = input.sourceBuildings;
   }
   if (buildings !== undefined && sourceBuildings !== buildings) throw new Error('City architecture source building count mismatch.');
+  if (input.heightReferences !== undefined) {
+    const references = input.heightReferences;
+    if (!object(references) || typeof references.provider !== 'string' || !/^[\w-]+$/.test(references.provider)
+      || !positive(references.buildings) || references.buildings > input.buildings) {
+      throw new Error('Invalid city architecture height reference accounting.');
+    }
+  }
   for (const lod of ['far', 'mid', 'near']) {
     const item = input.lods[lod];
     if (!object(item) || item.buildings !== input.buildings

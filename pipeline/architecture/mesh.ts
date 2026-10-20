@@ -44,7 +44,7 @@ export async function buildBatch(features: BuildingFeature[], lod: ArchitectureL
         minimum[axis] = Math.min(minimum[axis], point[axis]); maximum[axis] = Math.max(maximum[axis], point[axis]);
       }
     }
-    return { mesh, materials: result.materials, model: result.model };
+    return { mesh, materials: result.materials, model: result.model, heightReference: result.heightReference };
   });
   const step = Math.max(...maximum.map((value, axis) => value - minimum[axis])) / 65535;
   if (!Number.isFinite(step) || step <= 0) throw new Error('Empty or non-finite architecture batch.');
@@ -148,8 +148,9 @@ export async function buildBatch(features: BuildingFeature[], lod: ArchitectureL
   };
   const properties: Record<string, MetadataProperty> = {}, schema: Record<string, SchemaProperty> = {};
   const encoder = new TextEncoder();
-  const fields: (keyof BuildingProperties | 'model')[] = ['id', 'name', 'kind', 'height', 'basis', 'estimated'];
+  const fields: (keyof BuildingProperties | 'model' | 'heightReference')[] = ['id', 'name', 'kind', 'height', 'basis', 'estimated'];
   if (bodies.some(body => body.model)) fields.push('model');
+  if (bodies.some(body => body.heightReference)) fields.push('heightReference');
   for (const key of fields) {
     if (key === 'height') {
       const bytes = new Uint8Array(features.length * 8), view = new DataView(bytes.buffer);
@@ -160,8 +161,8 @@ export async function buildBatch(features: BuildingFeature[], lod: ArchitectureL
       features.forEach((feature, i) => { if (feature.properties.estimated) bytes[i >> 3] |= 1 << (i % 8); });
       properties[key] = { values: metadataView(bytes) }; schema[key] = { type: 'BOOLEAN' };
     } else {
-      const strings = features.map((feature, i) => encoder.encode(key === 'model'
-        ? bodies[i].model ? JSON.stringify(bodies[i].model) : '' : feature.properties[key]));
+      const strings = features.map((feature, i) => encoder.encode(key === 'model' || key === 'heightReference'
+        ? bodies[i][key] ? JSON.stringify(bodies[i][key]) : '' : feature.properties[key]));
       const offsets = new Uint32Array(features.length + 1);
       strings.forEach((value, i) => { offsets[i + 1] = offsets[i] + value.byteLength; });
       const bytes = new Uint8Array(offsets.at(-1)!);

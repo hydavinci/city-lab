@@ -2,6 +2,7 @@ import { Cartesian2, Cartesian3, Cesium3DTile, HeadingPitchRange, Matrix4 } from
 import { CityScene } from '../../web/scene/CityScene';
 import { CityArchitectureLayer } from '../../web/scene/CityArchitectureLayer';
 import { landmarks } from '../../web/core/landmarks';
+import { buildingHeightRecords } from '../../web/core/building-height-references';
 
 function mainScene(): CityScene {
   const container = document.querySelector('.cesium-container');
@@ -30,8 +31,9 @@ function architecture(): CityArchitectureLayer {
 }
 
 function definition(id: string) {
-  const record = landmarks.find(record => record.id === id);
-  if (!record) throw new Error(`Unknown review landmark: ${id}`);
+  const record = landmarks.find(record => record.id === id)
+    ?? buildingHeightRecords.find(record => record.sourceId === id);
+  if (!record) throw new Error(`Unknown review building: ${id}`);
   return record;
 }
 

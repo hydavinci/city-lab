@@ -4,6 +4,7 @@ import type { ArchitectureLod } from '../../web/core/building-architecture';
 import type { Bounds, BuildingFeature } from '../../web/core/types';
 import type { ArchitectureBatch } from './mesh';
 import { architectureExclusionFor, landmarkFor } from '../../web/core/landmarks';
+import { referenceHeightFor } from '../../web/core/building-heights';
 
 export interface ArchitectureTile {
   id: string; bounds: Bounds; features: BuildingFeature[]; lod?: ArchitectureLod; children: ArchitectureTile[];
@@ -95,7 +96,7 @@ export async function createTileset(
     const document: TileDocument = {
       boundingVolume: { region: [
         node.bounds[0] * radians, node.bounds[1] * radians, node.bounds[2] * radians, node.bounds[3] * radians,
-        0, Math.max(...node.features.map(f => landmarkFor(f)?.height ?? f.properties.height)) + 20,
+        0, Math.max(...node.features.map(f => landmarkFor(f)?.height ?? referenceHeightFor(f)?.height ?? f.properties.height)) + 20,
       ] },
       geometricError: node.lod === 'near' ? 0 : node.lod === 'mid' ? 3 : node.lod === 'far' ? 24 : Math.max(64, ...spans(node.bounds)),
       refine: 'REPLACE', extras: { buildings: node.features.length, ...(node.lod ? { lod: node.lod } : {}) },

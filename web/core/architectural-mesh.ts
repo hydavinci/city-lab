@@ -1,6 +1,7 @@
 import type { XYZ } from './architectural-geometry';
 import type { BuildingProperties } from './types';
 import type { LandmarkModel } from './landmarks';
+import type { HeightReference } from './building-heights';
 
 export interface ArchitectureMaterial {
   name: string;
@@ -55,7 +56,7 @@ export class ArchitecturalMesh implements ArchitectureMeshWriter {
     });
   }
 
-  finish(materials: ArchitectureMaterial[], source: BuildingProperties, model?: LandmarkModel): ArrayBuffer {
+  finish(materials: ArchitectureMaterial[], source: BuildingProperties, model?: LandmarkModel, heightReference?: HeightReference): ArrayBuffer {
     const chunks: (Float32Array | Uint32Array)[] = [];
     const bufferViews: { buffer: number; byteOffset: number; byteLength: number; target: number }[] = [];
     const accessors: { bufferView: number; componentType: number; count: number; type: string; min?: number[]; max?: number[] }[] = [];
@@ -87,7 +88,8 @@ export class ArchitecturalMesh implements ArchitectureMeshWriter {
     const document = {
       asset: { version: '2.0', generator: 'City Lab source-aligned architecture' },
       scene: 0, scenes: [{ nodes: [0] }],
-      nodes: [{ name: source.id, mesh: 0, extras: { source, inferred: 'Parametric architecture; no architectural survey.', ...(model ? { model } : {}) } }],
+      nodes: [{ name: source.id, mesh: 0, extras: { source, inferred: 'Parametric architecture; no architectural survey.',
+        ...(model ? { model } : {}), ...(heightReference ? { heightReference } : {}) } }],
       meshes: [{ primitives }], materials, accessors, bufferViews, buffers: [{ byteLength }],
     };
     const text = new TextEncoder().encode(JSON.stringify(document));

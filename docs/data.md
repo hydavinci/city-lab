@@ -50,6 +50,40 @@ OSM 建筑高度字段是社区提供的属性，不保证实测精度。城市�
 缺失高度不会使用随机数，也不会为了夜景效果夸大真实高度。
 目前没有提取坡屋顶或建筑部件，OSM 属性可通过建筑详情中的原始记录链接核查。
 
+### 通用参考高度插件
+
+`web/core/building-heights.ts` 提供可复用的 `createHeightProvider`：
+数据记录与建模代码分离，`building-height-references.ts` 只保存建筑身份、轮廓范围、
+高度、可核实的楼层数、来源和核对日期，不为每栋楼编写模型。
+新增记录仍走同一套 `emitArchitecture`，覆盖 far／mid／near 三档；
+立面、塔冠、窗格分布是通用参数化近似，不是逐楼测绘，楼层数不会被伪造为实测窗格。
+
+插件仅替换 `fallback` 类型默认高度，不覆盖已有 OSM 高度、楼层推算或现有地标模型。
+源 ID 必须精确匹配，轮廓范围变化超过 0.00002° 时构建失败，要求重新核对身份；
+不会把附近或同小区的记录传播给其他建筑。GLB 的 `heightReference` 元数据与原始
+`height`／`basis`／`estimated` 分开保存，点击建筑可以分别查看。
+数据和插件代码均参与构建哈希，修改后运行 `npm run data:architecture:build`，
+完整生成三档模型后才发布新清单；包围体使用修正高度，避免高楼被裁掉。
+
+2026-10-20 核对并接入的两条记录：
+
+| 建筑 | 冻结 OSM 轮廓 | 原默认值 | 参考总高 | 地上楼层 | 资料 |
+|---|---|---|---|---|---|
+| 苏州 ICC | `way/802754584` | 12.8 m | 303.2 m | 68 | [CTBUH 建筑记录](https://www.skyscrapercenter.com/building/suzhou-icc/10738)、[位置](https://www.skyscrapercenter.com/map/building/10738) |
+| 苏州恒和广场 | `way/822365267` | 12.8 m | 175 m | 48 | [CTBUH 建筑记录](https://www.skyscrapercenter.com/building/suzhou-henghe-plaza/2529)、[位置](https://www.skyscrapercenter.com/map/building/2529) |
+
+来源地图点分别落在对应塔楼轮廓内，距轮廓质心约 10.8 m／3.2 m；
+恒和广场相交的大轮廓 `way/822365266` 保持原状，不把裙楼一并拉高。
+CTBUH 的研祥金融中心记录因本地没有可匹配轮廓而未采用。
+这里只引用少量事实及来源链接，不复制其照片或模型，不声称 CTBUH 数据具有 ODbL
+或开放数据许可；原始 OSM 轮廓仍按 ODbL 署名。
+
+这不是全市高度补齐：56,459 条原始建筑中 55,033 条仍是类型默认来源，
+目前只在渲染层修正其中 2 条。原始 JSON 与统计不改写。
+GBA 和 3D-GloBFP 的苏州样本均未通过高度对照：例如 3D-GloBFP 对有 194.7 m
+来源高度的苏州中心 2 号楼约为 88.9 m，因此未批量接入，也未按统一倍数拉伸。
+未来扩充必须同时核实高度与建筑身份；增加数据记录不需要增加建模分支。
+
 ## 离线与资源预算
 
 默认渲染只从本地 HTTP 服务读取数据、Cesium Workers/Assets/Widgets/ThirdParty。

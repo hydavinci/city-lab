@@ -224,14 +224,22 @@ export function App() {
       <div className="mouse-hint">左键拖动平移 <span>·</span> 滚轮缩放 <span>·</span> 右键拖动缩放 <span>·</span> 中键拖动环绕</div>
       {selected && <section className="selection-card">
         <div className="section-title"><span><Building2 size={16} /> 建筑信息</span><button className="icon-button" aria-label="关闭建筑信息" onClick={() => setSelected(null)}><X size={16} /></button></div>
-        <h3>{selected.model?.name || selected.name || '未命名建筑'}</h3>
+        <h3>{selected.model?.name || selected.heightReference?.name || selected.name || '未命名建筑'}</h3>
         {selected.model && <>
           <dl><div><dt>建模总高</dt><dd>{selected.model.height} m</dd></div>
             <div><dt>建模依据</dt><dd>{selected.model.heightBasis === 'verified' ? '资料核实' : selected.model.heightBasis === 'source' ? '保留 OSM 高度' : '比例估算'}</dd></div></dl>
           <p className="section-note">{selected.model.approximation}</p>
           {selected.model.sources.map(source => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.label}<ArrowUpRight size={12} /></a>)}
         </>}
-        <dl><div><dt>{selected.model ? '原始 OSM 高度' : '高度'}</dt><dd>{selected.basis === 'reference' ? '未标注' : `${selected.height.toFixed(1)} m`}</dd></div>
+        {selected.heightReference && <>
+          <dl><div><dt>参考建筑高度</dt><dd>{selected.heightReference.height} m</dd></div>
+            {selected.heightReference.floors !== undefined && <div><dt>地上楼层</dt><dd>{selected.heightReference.floors} 层</dd></div>}
+            <div><dt>高度依据</dt><dd>资料核实 · 通用高度插件</dd></div>
+            <div><dt>资料核对日期</dt><dd>{selected.heightReference.checkedAt}</dd></div></dl>
+          <p className="section-note">保留 OSM 轮廓，通用参数化外形；建筑总高有资料依据，立面、塔冠与窗格并非实测还原。</p>
+          {selected.heightReference.sources.map(source => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.label}<ArrowUpRight size={12} /></a>)}
+        </>}
+        <dl><div><dt>{selected.model || selected.heightReference ? '原始 OSM 高度' : '高度'}</dt><dd>{selected.basis === 'reference' ? '未标注' : `${selected.height.toFixed(1)} m`}</dd></div>
           <div><dt>高度依据</dt><dd>{selected.basis === 'reference' ? '资料核实 · 补充景点' : selected.basis === 'height' ? 'OSM 标注高度' : selected.basis === 'levels' ? '楼层数推算 · 估算' : '类型默认值 · 估算'}</dd></div>
           {selected.model?.source && <div><dt>景点采集时间</dt><dd>{selected.model.source.timestamp.slice(0, 10)}</dd></div>}
           <div><dt>源标识</dt><dd>{selected.id}</dd></div></dl>

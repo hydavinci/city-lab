@@ -5,6 +5,7 @@ import {
 import { parseCityArchitectureManifest } from '../core/architecture-manifest';
 import type { BuildingProperties, SceneSettings } from '../core/types';
 import { parseLandmarkModel, type SelectedBuilding } from '../core/landmarks';
+import { parseHeightReference } from '../core/building-heights';
 
 const budgets = {
   low: { maximumScreenSpaceError: 32, cacheBytes: 64 * 1024 * 1024, maximumCacheOverflowBytes: 16 * 1024 * 1024 },
@@ -232,7 +233,10 @@ export class CityArchitectureLayer {
         : model?.source?.type === 'osm-attraction') {
         throw new Error('Invalid supplemental attraction metadata.');
       }
-      return { id, name, kind, height, basis: basis as BuildingProperties['basis'], estimated, ...(model ? { model } : {}) };
+      const source = { id, name, kind, height, basis: basis as BuildingProperties['basis'], estimated };
+      const heightReference = parseHeightReference(picked.getProperty('heightReference'), source);
+      if (model && heightReference) throw new Error('Conflicting architecture height metadata.');
+      return { ...source, ...(model ? { model } : {}), ...(heightReference ? { heightReference } : {}) };
     } catch (error) {
       this.fail(error);
       return undefined;

@@ -4,6 +4,9 @@ import { CityArchitectureLayer } from '../../web/scene/CityArchitectureLayer';
 import { defaultSettings } from '../../web/core/settings';
 import { landmarks, landmarkModel } from '../../web/core/landmarks';
 import { architectureSupplements, suzhouEye } from '../../web/core/jinji-landmarks';
+import { readFileSync } from 'node:fs';
+import { referenceHeightFor } from '../../web/core/building-heights';
+import type { BuildingFeature } from '../../web/core/types';
 
 const manifest = {
   version: 1, dataset: '0123456789abcdef', sourceDataset: 'source', generatedAt: '2026-10-17T00:00:00Z',
@@ -50,6 +53,26 @@ afterEach(() => {
 });
 
 describe('native cached city architecture', () => {
+  it('picks generic verified heights separately from original OSM fields and rejects altered provenance', async () => {
+    const { layer, native, onError } = fixture();
+    await layer.load('source', 2);
+    const tile = JSON.parse(readFileSync('public/data/c8a953228b2ff6af/tiles/4828_1253.json', 'utf8')) as {
+      features: BuildingFeature[];
+    };
+    const source = tile.features.find(feature => feature.properties.id === 'way/802754584')!;
+    const reference = referenceHeightFor(source)!;
+    const properties = { ...source.properties, heightReference: JSON.stringify(reference) };
+    const feature = Object.create(Cesium3DTileFeature.prototype) as Cesium3DTileFeature;
+    Object.defineProperties(feature, {
+      tileset: { value: native }, getProperty: { value: (name: keyof typeof properties) => properties[name] },
+    });
+    expect(layer.selected(feature)).toEqual({ ...source.properties, heightReference: reference });
+    properties.heightReference = JSON.stringify({ ...reference, height: 999 });
+    expect(layer.selected(feature)).toBeUndefined();
+    expect(onError).toHaveBeenCalledOnce();
+    expect(layer.error?.message).toMatch(/height metadata/i);
+  });
+
   it('picks a supplemental attraction with reference provenance rather than an invented OSM height', async () => {
     const { layer, native, onError } = fixture();
     await layer.load('source', 2);

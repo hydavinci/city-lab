@@ -8,6 +8,7 @@ import { buildBatch, type ArchitectureBatch } from './mesh';
 import { createTileset, partitionArchitecture } from './tiles';
 import { architectureExclusionFor } from '../../web/core/landmarks';
 import { architectureSupplements } from '../../web/core/jinji-landmarks';
+import { referenceHeightFor, verifiedHeightProvider } from '../../web/core/building-heights';
 
 interface StoredBatch extends Omit<ArchitectureBatch, 'bytes'> { uri: string; bytes: number; sha256: string }
 interface BuildOptions { inputDir: string; outputDir: string; onProgress?: (completed: number, total: number) => void }
@@ -35,7 +36,8 @@ export async function buildCityArchitecture({ inputDir, outputDir, onProgress }:
     '../../web/core/architectural-mesh.ts', '../../web/core/architectural-geometry.ts', '../../web/core/city-architecture.ts',
     '../../web/core/landmarks.ts', '../../web/core/landmark-architecture.ts', '../../web/core/landmark-mesh.ts',
     '../../web/core/landmark-towers.ts', '../../web/core/landmark-pagodas.ts', '../../web/core/landmark-mall.ts',
-    '../../web/core/jinji-landmarks.ts', '../../web/core/landmark-skyline.ts', '../../web/core/landmark-wheel.ts']) {
+    '../../web/core/jinji-landmarks.ts', '../../web/core/landmark-skyline.ts', '../../web/core/landmark-wheel.ts',
+    '../../web/core/building-heights.ts', '../../web/core/building-height-references.ts', '../../web/core/geo.ts']) {
     hash.update(await readFile(new URL(path, import.meta.url)));
   }
   const features: BuildingFeature[] = [];
@@ -51,6 +53,7 @@ export async function buildCityArchitecture({ inputDir, outputDir, onProgress }:
   const supplements = architectureSupplements(source.dataset);
   const tree = partitionArchitecture([...features, ...supplements.features]), dataset = hash.digest('hex').slice(0, 16);
   const buildings = tree.features.length;
+  const referencedBuildings = tree.features.filter(feature => referenceHeightFor(feature)).length;
   const exclusions = features.flatMap(feature => {
     const exclusion = architectureExclusionFor(feature);
     return exclusion ? [exclusion] : [];
@@ -115,6 +118,7 @@ export async function buildCityArchitecture({ inputDir, outputDir, onProgress }:
   const result: ArchitectureManifest = {
     version: 1, dataset, sourceDataset: source.dataset, generatedAt: new Date().toISOString(),
     tileset: `${dataset}/tileset.json`, buildings, bounds: tree.bounds, lods,
+    ...(referencedBuildings ? { heightReferences: { provider: verifiedHeightProvider.id, buildings: referencedBuildings } } : {}),
     ...(exclusions.length || supplements.additions.length ? {
       sourceBuildings: features.length, exclusions, ...(supplements.additions.length ? { additions: supplements.additions } : {}),
     } : {}),

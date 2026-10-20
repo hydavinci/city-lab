@@ -91,6 +91,27 @@ async function unpack(bytes: Uint8Array) {
 }
 
 describe('persistent architecture batches', () => {
+  it.each(['far', 'mid', 'near'] as const)('applies generic reference heights with unchanged source fields in %s', async lod => {
+    const sourcesById = ['4828_1253', '4823_1252'].flatMap(tile =>
+      (JSON.parse(readFileSync(`public/data/c8a953228b2ff6af/tiles/${tile}.json`, 'utf8')) as { features: BuildingFeature[] }).features);
+    const features = ['way/802754584', 'way/822365267', 'way/822365266']
+      .map(id => sourcesById.find(feature => feature.properties.id === id)!);
+    const before = structuredClone(features);
+    const { document, sources, primitives } = await unpack((await buildBatch(features, lod)).bytes);
+    for (const [index, height] of [303.2, 175, 12.8].entries()) {
+      const { heightReference, ...original } = sources[index];
+      expect(original).toEqual(before[index].properties);
+      if (index < 2) expect(JSON.parse(String(heightReference))).toMatchObject({
+        provider: 'verified-building-heights-v1', height, floors: index === 0 ? 68 : 48,
+      });
+      else expect(heightReference).toBe('');
+      const top = Math.max(...primitives.flatMap(p =>
+        p.positions.filter((_, vertex) => p.features[vertex] === index).map(point => point[1])));
+      expect(Math.abs(top - (height + 0.46))).toBeLessThanOrEqual(document.nodes[0].scale[1] / 2 + 1e-6);
+    }
+    expect(features).toEqual(before);
+  });
+
   it.each(['far', 'mid', 'near'] as const)('keeps landmark provenance separate from unchanged OSM fields in %s batches', async lod => {
     const tile = JSON.parse(readFileSync('public/data/c8a953228b2ff6af/tiles/4826_1252.json', 'utf8')) as { features: BuildingFeature[] };
     const gate = tile.features.find(feature => feature.properties.id === 'way/933819302')!;
