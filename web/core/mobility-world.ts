@@ -1,5 +1,6 @@
 import type { ActorKind, Edge, MobilityOptions, Route, XY } from './enhancements';
 import { ACTORS } from './mobility-actors';
+import { ConflictReservations } from './mobility-conflicts';
 import {
   mobilityBudget, parseMobilityChunk, type MobileActor, type MobilityChunk, type SpawnGate, type WorldSnapshot,
 } from './mobility';
@@ -14,6 +15,7 @@ interface Moving {
 }
 interface Occupant { centre: number; back: number }
 interface Entry { cell: LoadedChunk; route: Route; index: number; kind: ActorKind }
+interface ConflictGroup { zones: string[]; enter: number; exit: number }
 const walking = (kind: ActorKind) => kind.startsWith('person-');
 function check(ok: unknown, message: string): asserts ok {
   if (!ok) throw new Error(`Mobility world: ${message}`);
@@ -46,6 +48,9 @@ export class MobilityWorld {
   private owned = new Map<string, string>();
   private actors = new Map<number, Moving>();
   private occupancy = new Map<string, Map<number, Occupant>>();
+  private exitStorage = new Map<string, Map<number, Occupant>>();
+  private reservations = new ConflictReservations();
+  private groups = new Map<number, ConflictGroup>();
   private entries: Entry[] = [];
   private ticks = 0;
   private identity = 0;
@@ -80,6 +85,15 @@ export class MobilityWorld {
       hop.cell.value.id === id && hop.start <= state.progress + state.actor.length / 2
       && hop.start + hop.edge.length >= state.progress - state.actor.length / 2)),
     `Cannot remove cell ${id} while it owns a live actor body`);
+    const owners = this.reservations.owners();
+    for (const state of this.actors.values()) {
+      const group = this.groups.get(state.actor.id);
+      if (!group?.zones.every(zone => owners[zone] === state.actor.id)) continue;
+      check(!state.path.some(hop => hop.cell.value.id === id
+        && hop.start <= group.exit + GAP + state.actor.length / 2
+        && hop.start + hop.edge.length >= group.enter - state.actor.length / 2),
+      `Cannot remove cell ${id} while its junction or exit storage is reserved`);
+    }
     const chunk = this.chunks.get(id);
     if (!chunk) return;
     chunk.value.ownedEdges.forEach(edge => this.owned.delete(edge)); this.chunks.delete(id);
@@ -101,7 +115,15 @@ export class MobilityWorld {
     for (const state of this.actors.values()) this.extend(state);
     this.occupancy.clear();
     for (const state of this.actors.values()) { state.occupied.clear(); this.occupy(state); }
+    this.refreshExitStorage();
     if (this.options.arrivals) for (const mode of ['drive', 'walk'] as const) this.spawn(mode, gate);
+    this.prepareReservations();
+    this.reservations.grant(id => {
+      this.refreshExitStorage();
+      const state = this.actors.get(id)!, group = this.groups.get(id)!;
+      return this.room(state) >= group.exit - state.progress + GAP;
+    });
+    this.refreshExitStorage();
     for (const state of this.actors.values()) this.move(state, gate);
     this.ticks++;
   }
@@ -109,7 +131,7 @@ export class MobilityWorld {
   snapshot(): WorldSnapshot {
     return { time: this.time, actors: [...this.actors.values()].map(state => ({
       ...state.actor, position: [...state.actor.position],
-    })), owners: {}, passedByEntry: { ...this.passed }, travelledByKind: { ...this.travelled } };
+    })), owners: this.reservations.owners(), passedByEntry: { ...this.passed }, travelledByKind: { ...this.travelled } };
   }
 
   nextWakeTime(): number | undefined {
@@ -127,6 +149,7 @@ export class MobilityWorld {
 
   clear(): void {
     this.chunks.clear(); this.owned.clear(); this.actors.clear(); this.occupancy.clear(); this.entries = [];
+    this.exitStorage.clear(); this.reservations.clear(); this.groups.clear();
     this.ticks = 0; this.identity = 0; this.randomState = this.options.seed; this.arrival = { drive: 0, walk: 0 };
     this.passed = {}; this.travelled = travelled(); this.advanced = false; this.dirty = false;
   }
@@ -187,7 +210,7 @@ export class MobilityWorld {
       const state: Moving = { actor, progress, index: 0, entry: actor.route, occupied: new Set(),
         path: [{ cell: entry.cell, route: entry.route, index: entry.index, edge, start: 0 }] };
       this.extend(state);
-      const overlaps = [...(this.occupancy.get(edge.id)?.values() ?? [])].some(occupant =>
+      const overlaps = [...(this.occupancy.get(edge.id)?.values() ?? []), ...(this.exitStorage.get(edge.id)?.values() ?? [])].some(occupant =>
         occupant.back < progress + body.length / 2 + GAP
         && 2 * occupant.centre - occupant.back > progress - body.length / 2 - GAP);
       if (overlaps || this.room(state) < 0) continue;
@@ -223,15 +246,64 @@ export class MobilityWorld {
     }
     return undefined;
   }
-  private extend(state: Moving): void {
+  private extend(state: Moving, minimum = 0): void {
     const braking = walking(state.actor.kind) ? 2 : 4;
-    const lookahead = Math.max(30, state.actor.speed ** 2 / (2 * braking) + state.actor.speed * 2 + state.actor.length);
+    const lookahead = Math.max(30, minimum, state.actor.speed ** 2 / (2 * braking) + state.actor.speed * 2 + state.actor.length);
     for (let i = 0; i < 512; i++) {
       const tail = state.path.at(-1)!;
       if (tail.start + tail.edge.length > state.progress + lookahead) break;
       const next = this.next(tail, state.actor.kind);
       if (!next) break;
       state.path.push(next);
+    }
+  }
+  private conflictGroup(state: Moving): ConflictGroup | undefined {
+    for (let attempt = 0; attempt < 512; attempt++) {
+      const intervals = state.path.flatMap(hop => hop.edge.conflicts.map(conflict => ({
+        zone: hop.cell.value.zoneIds[conflict.zone], enter: hop.start + conflict.enter, exit: hop.start + conflict.exit,
+      }))).filter(interval => interval.exit + END_MARGIN >= state.progress)
+        .sort((a, b) => a.enter - b.enter || a.zone.localeCompare(b.zone));
+      const first = intervals[0];
+      if (!first) return undefined;
+      const group: ConflictGroup = { zones: [first.zone], enter: first.enter, exit: first.exit };
+      for (const interval of intervals.slice(1)) {
+        if (interval.enter > group.exit + END_MARGIN * 2) break;
+        group.zones.push(interval.zone); group.exit = Math.max(group.exit, interval.exit);
+      }
+      group.zones = [...new Set(group.zones)].sort();
+      const before = state.path.at(-1)!;
+      this.extend(state, group.exit - state.progress + state.actor.length + GAP + 1);
+      if (before === state.path.at(-1)) return group;
+    }
+    throw new Error('Mobility world: Conflict lookahead exceeded the bounded route budget');
+  }
+  private prepareReservations(): void {
+    const owners = this.reservations.owners();
+    for (const state of this.actors.values()) {
+      const previous = this.groups.get(state.actor.id);
+      if (previous?.zones.every(zone => owners[zone] === state.actor.id)) continue;
+      const group = this.conflictGroup(state);
+      if (!group) {
+        this.reservations.release(state.actor.id); this.groups.delete(state.actor.id);
+        continue;
+      }
+      this.groups.set(state.actor.id, group);
+      const braking = walking(state.actor.kind) ? 2 : 4;
+      const approach = state.actor.speed ** 2 / (2 * braking) + state.actor.speed * MOBILITY_STEP + 2;
+      if (group.enter - state.progress <= approach) this.reservations.request(state.actor.id, group.zones, this.time);
+    }
+  }
+  private refreshExitStorage(): void {
+    this.exitStorage.clear();
+    const owners = this.reservations.owners();
+    for (const id of new Set(Object.values(owners))) {
+      const state = this.actors.get(id)!, group = this.groups.get(id)!;
+      for (const hop of state.path) {
+        const centre = group.exit + GAP - hop.start, half = state.actor.length / 2;
+        if (centre + half < 0 || centre - half > hop.edge.length) continue;
+        const entries = this.exitStorage.get(hop.edge.id) ?? new Map<number, Occupant>();
+        entries.set(id, { centre, back: centre - half }); this.exitStorage.set(hop.edge.id, entries);
+      }
     }
   }
   private occupy(state: Moving): void {
@@ -250,7 +322,8 @@ export class MobilityWorld {
     let room = tail.start + tail.edge.length - state.progress - state.actor.length / 2 - END_MARGIN;
     for (let i = state.index; i < state.path.length; i++) {
       const hop = state.path[i];
-      for (const [id, occupant] of this.occupancy.get(hop.edge.id) ?? []) {
+      const occupants = [...(this.occupancy.get(hop.edge.id) ?? []), ...(this.exitStorage.get(hop.edge.id) ?? [])];
+      for (const [id, occupant] of occupants) {
         if (id === state.actor.id || hop.start + occupant.centre <= state.progress) continue;
         room = Math.min(room, hop.start + occupant.back - state.progress - state.actor.length / 2 - GAP);
       }
@@ -259,7 +332,12 @@ export class MobilityWorld {
   }
   private move(state: Moving, gate: SpawnGate): void {
     const actor = state.actor, braking = walking(actor.kind) ? 2 : 4, acceleration = walking(actor.kind) ? 1 : 2;
-    const room = Math.max(0, this.room(state));
+    let room = this.room(state);
+    const group = this.groups.get(actor.id), owners = this.reservations.owners();
+    if (group && !group.zones.every(zone => owners[zone] === actor.id)) {
+      room = Math.min(room, group.enter - state.progress - END_MARGIN);
+    }
+    room = Math.max(0, room);
     let target = Math.sqrt(2 * braking * Math.max(0, room - actor.speed * MOBILITY_STEP));
     for (let i = state.index; i < state.path.length; i++) {
       const hop = state.path[i], ahead = Math.max(0, hop.start - state.progress - actor.length / 2);
@@ -278,6 +356,9 @@ export class MobilityWorld {
     if (walking(actor.kind)) actor.walkPhase = (actor.walkPhase + moved / 1.2) % 1;
     this.travelled[actor.kind] += moved; this.advanced ||= moved > 1e-8;
     this.occupy(state);
+    if (group && state.progress > group.exit + END_MARGIN) {
+      this.reservations.release(actor.id); this.groups.delete(actor.id);
+    }
     const tail = state.path.at(-1)!;
     const exit = !tail.edge.next.length && !tail.cell.value.ports.some(port =>
       port.edge === tail.edge.id && port.at === 'exit' && port.links.length);
@@ -286,6 +367,7 @@ export class MobilityWorld {
       && gate.canRetire(actor.cell, actor.position, actor.kind)) {
       for (const key of state.occupied) this.occupancy.get(key)?.delete(actor.id);
       this.actors.delete(actor.id); this.passed[state.entry] = (this.passed[state.entry] ?? 0) + 1;
+      this.reservations.release(actor.id); this.groups.delete(actor.id);
     }
     while (state.index > 0 && state.path[0].start + state.path[0].edge.length < state.progress - actor.length / 2 - GAP) {
       state.path.shift(); state.index--;

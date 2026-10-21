@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-21-citywide-mobility-design.md`
 
-**Execution status (2026-10-21):** Tasks 1–6 implemented on `feat/citywide-mobility`.
+**Execution status (2026-10-21):** Tasks 1–7 implemented on `feat/citywide-mobility`.
 The actual municipality intersects 2,232 acquisition cells. Public-service probes timed out or
 returned HTTP 406; no full-city sources or mobility release have been published. The user approved
 continuing compiler, simulation and UI implementation while leaving publication/data acceptance incomplete.
@@ -393,7 +393,7 @@ current queues, exit capacity and fixed simulation time.
 `release(actor: number): void`, `owners(): Readonly<Record<string, number>>`, `clear(): void`.
 Reservations are all-or-none for a route's immediately required overlapping zones.
 
-- [ ] Add the fairness/atomicity counterexample:
+- [x] Add the fairness/atomicity counterexample:
 
 ```ts
 it('does not split multi-zone ownership into circular wait', () => {
@@ -406,16 +406,23 @@ it('does not split multi-zone ownership into circular wait', () => {
 });
 ```
 
-- [ ] Run red. Order requests by first eligible request time, then actor ID; acquire needed zones
+- [x] Run red. Order requests by first eligible request time, then actor ID; acquire needed zones
   atomically after checking exit storage. Prevent later conflicting requests from starving an older
   eligible one, while allowing independent zones to progress.
-- [ ] Integrate vehicle/person requests before their full-body leading edge can cross zone entry;
+- [x] Integrate vehicle/person requests before their full-body leading edge can cross zone entry;
   retain all ownership until the trailing body edge has left. Use seam aliases, not per-chunk copies.
   Pedestrians and vehicles share the same reservation table.
-- [ ] Test opposing vehicles, crossing people, tail-clearance release, blocked exits, cancellation,
+- [x] Test opposing vehicles, crossing people, tail-clearance release, blocked exits, cancellation,
   route changes, seam duplicates and eventual service in finite contention with available exits.
   Run a ten-minute synthetic simulation checking every snapshot for body overlap and shared ownership.
-- [ ] Run world/conflict tests and type-check; commit `feat: coordinate fair vehicle and pedestrian junction access`.
+- [x] Run world/conflict tests and type-check; commit `feat: coordinate fair vehicle and pedestrian junction access`.
+
+Implementation note: connected complete-body conflict intervals form one atomic request. Eligibility
+requires known downstream storage, which remains reserved against other approaches and new arrivals.
+Owning bodies and reserved exits pin their chunks through seam handoff. Citywide compilation also
+includes physical intersections of active walking routes, without connecting unrelated topology;
+unused reverse walking edges do not create whole-corridor phantom reservations. Legacy district
+compilation retains its original policy. The ten-minute overlap/ownership run is synthetic only.
 
 ### Task 8: Nearby Chunk Loading and Matching Road Surfaces
 

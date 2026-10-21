@@ -293,7 +293,7 @@ export function compileNetwork(source: unknown, selection: unknown, buildings: P
       conflicts:[],inferred:['sampled cubic <=0.25m chord; continuous body sweep','car radii 5/5.5m; bus radius 10m']};
     if(validate(e)) { e.allowed=e.allowed.filter(k=>a.edge.allowed.includes(k)&&b.edge.allowed.includes(k)); if(e.allowed.length) a.edge.next.push(e.id); else network.edges.pop(); }
   }
-  addConflicts(network);
+  if(!ports) addConflicts(network);
   const edgeMap=new Map(network.edges.map(e=>[e.id,e]));
   const centre=project(s.showcase.target,origin), centralRadius=s.showcase.range*0.15;
   const starts=valid.filter(x=>x.edge.mode==='drive' && x.terminalStart && (ports || distance(x.edge.points[0],centre)>centralRadius));
@@ -357,6 +357,7 @@ export function compileNetwork(source: unknown, selection: unknown, buildings: P
     }
   }
   if(!network.routes.length) throw new NoSafeRoutesError(diagnostics);
+  if(ports) addConflicts(network,true);
   for(const route of network.routes) {
     const edges=route.edges.map(id=>edgeMap.get(id)!);
     for(let i=1;i<edges.length;i++) for(const kind of route.allowed) {
@@ -384,18 +385,20 @@ function conflictGeometry(n: Network) {
   return {sampled,sweeps,bounds};
 }
 
-function addConflicts(n: Network): void {
+function addConflicts(n: Network, walkingConflicts=false): void {
   const geometry=conflictGeometry(n), {sweeps,bounds}=geometry;
+  const walkingRoutes=new Set(n.routes.filter(route=>route.mode==='walk').flatMap(route=>route.edges));
   const nearby=spatialCandidates(n.edges,e=>bounds.get(e.id)!);
   const indices=new Map(n.edges.map((edge,index)=>[edge.id,index]));
   const candidates: {id:string;polygon:Polygon2;edges:string[]}[]=[];
   for(const [i,a] of n.edges.entries()) for(const b of nearby(bounds.get(a.id)!)) {
     if(indices.get(b.id)!<=i) continue;
-    if(a.mode==='walk' && b.mode==='walk') continue;
+    if(a.mode==='walk' && b.mode==='walk'
+      && !(walkingConflicts && walkingRoutes.has(a.id) && walkingRoutes.has(b.id))) continue;
     if(!boundsOverlap(bounds.get(a.id)!,bounds.get(b.id)!)) continue;
     // A predecessor/successor is one continuous movement; following owns spacing.
     if(a.next.includes(b.id)||b.next.includes(a.id)) continue;
-    if(a.mode===b.mode && a.sourceIds.filter(id=>id.startsWith('way/')).length===1
+    if(a.mode==='drive' && b.mode==='drive' && a.sourceIds.filter(id=>id.startsWith('way/')).length===1
       && b.sourceIds.filter(id=>id.startsWith('way/')).length===1 && a.sourceIds[0]===b.sourceIds[0]) continue;
     const hit: XY[]=[];
     for(const p of sweeps.get(a.id)!) for(const q of sweeps.get(b.id)!) if(polygonsIntersect(p,q)) hit.push(...p[0],...q[0]);
