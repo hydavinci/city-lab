@@ -2,7 +2,7 @@ import { parseNetwork } from '../../web/core/enhancements';
 import type { ActorKind, Diagnostic, Edge, Network, Polygon2, XY } from '../../web/core/enhancements';
 import type { Bounds } from '../../web/core/types';
 import { validateSource } from './fetch';
-import { boundsOverlap, distance, hull, lerp, polygonBounds, polygonsIntersect, project, rectangle, sweptEnvelope, validateEnvelope } from './geometry';
+import { boundsOverlap, distance, hull, lerp, polygonBounds, polygonsIntersect, project, rectangle, spatialCandidates, sweptEnvelope, validateEnvelope } from './geometry';
 
 export const ACTORS: Record<ActorKind, { length: number; width: number; radius: number }> = {
   'car-a': { length: 4.4, width: 1.8, radius: 5 },
@@ -22,6 +22,11 @@ export interface Selection {
   crossings: { ways: string[]; from: {node:string;sideRoute:string}; to: {node:string;sideRoute:string};
     crossedRoads: {way:string;node:string}[] }[];
   excludedWays: Record<string,string[]>; diagnostics: Diagnostic[];
+}
+export class NoSafeRoutesError extends Error {
+  constructor(readonly diagnostics: Diagnostic[]) {
+    super(`No safe entry-to-exit routes: ${JSON.stringify(diagnostics)}`);
+  }
 }
 function fail(message: string): never { throw new Error(message); }
 const plain = (v: unknown): v is Record<string,unknown> => !!v && typeof v==='object' && !Array.isArray(v);
@@ -94,7 +99,8 @@ function numeric(value: string|undefined, fallback: number, type: 'width'|'lanes
   if(value===undefined) return fallback;
   const m=/^(\d+(?:\.\d+)?)\s*(m|km\/h|mph)?$/.exec(value);
   if(!m || !Number.isFinite(Number(m[1])) || Number(m[1])<=0 || (type==='lanes' && (m[2] || !Number.isInteger(Number(m[1]))))
-    || (type==='width' && m[2] && m[2]!=='m') || (type==='speed' && m[2]==='m')) fail(`Invalid ${type}: ${value}`);
+    || (type==='width' && (Number(m[1])>80 || m[2] && m[2]!=='m'))
+    || (type==='lanes' && Number(m[1])>12) || (type==='speed' && m[2]==='m')) fail(`Invalid ${type}: ${value}`);
   return Number(m[1])*(type==='speed' ? (m[2]==='mph'?0.44704:1/3.6):1);
 }
 function clip(a: XY,b: XY,bounds: Bounds): [XY,XY,number,number]|undefined {
@@ -132,7 +138,8 @@ function minRadius(ps: XY[]): number {
 }
 interface SegmentInfo { edge: Edge; start: string; end: string; direction: XY; way: SelectedWay; lane: number; terminalStart: boolean; terminalEnd: boolean }
 
-export function compileNetwork(source: unknown, selection: unknown, buildings: Polygon2[], water: Polygon2[]): {network:Network;diagnostics:Diagnostic[]} {
+export function compileNetwork(source: unknown, selection: unknown, buildings: Polygon2[], water: Polygon2[],
+  options: { routePolicy?: 'ports' } = {}): {network:Network;diagnostics:Diagnostic[]} {
   const s=parseSelection(selection,source), diagnostics: Diagnostic[]=[...s.diagnostics];
   const origin: XY=[(s.bounds[0]+s.bounds[2])/2,(s.bounds[1]+s.bounds[3])/2];
   const local0=project([s.bounds[0],s.bounds[1]],origin),local1=project([s.bounds[2],s.bounds[3]],origin);
@@ -223,12 +230,17 @@ export function compileNetwork(source: unknown, selection: unknown, buildings: P
     }
   }
   const network: Network={origin,bounds:s.bounds,edges:[],routes:[],zones:[],buildings,water};
+  const nearbyRoads=spatialCandidates(roads,polygonBounds), nearbyPaths=spatialCandidates(footpaths,polygonBounds);
+  const nearbyBuildings=spatialCandidates(buildings,polygonBounds), nearbyWater=spatialCandidates(water,polygonBounds);
+  const nearbySources=spatialCandidates(roadSources,road=>polygonBounds(road.polygon));
   const validate=(e:Edge): boolean=>{
-    e.corridor=(e.mode==='drive'?roads:footpaths).filter(p=>boundsOverlap(polygonBounds(p),polygonBounds(hull(e.points.flatMap(p=>[[p[0]-12,p[1]-12],[p[0]+12,p[1]+12]] as XY[])))));
+    const box=polygonBounds(hull(e.points.flatMap(p=>[[p[0]-12,p[1]-12],[p[0]+12,p[1]+12]] as XY[])));
+    e.corridor=(e.mode==='drive'?nearbyRoads:nearbyPaths)(box);
+    const obstacles=nearbyBuildings(box), waters=nearbyWater(box);
     const radius=minRadius(e.points);
     if(e.mode==='walk') {
       const body=sweptEnvelope(e.points,0.6,0.6);
-      const unsupported=roadSources.filter(road=>body.some(p=>polygonsIntersect(p,road.polygon))
+      const unsupported=nearbySources(box).filter(road=>body.some(p=>polygonsIntersect(p,road.polygon))
         && !s.crossings.some(c=>c.ways.some(id=>e.sourceIds.includes(id))
           && c.crossedRoads.some(r=>r.way===road.way)));
       if(unsupported.length) {note([...new Set([...e.sourceIds,...unsupported.map(r=>r.way)])],'UNSOURCED_CROSSING',
@@ -238,7 +250,7 @@ export function compileNetwork(source: unknown, selection: unknown, buildings: P
       if(kind.startsWith('person')!==(e.mode==='walk') || body.width+0.002>e.width || radius<body.radius) continue;
       try {
         const sweep=sweptEnvelope(e.points,body.length,body.width);
-        validateEnvelope(sweep,e.corridor,buildings,water);
+        validateEnvelope(sweep,e.corridor,obstacles,waters);
         validateEnvelope(sweep,[boundary],[],[]);
         e.allowed.push(kind);
       } catch { /* Eligibility fails closed for this complete body. */ }
@@ -247,7 +259,12 @@ export function compileNetwork(source: unknown, selection: unknown, buildings: P
     network.edges.push(e); return true;
   };
   const valid=all.filter(x=>validate(x.edge));
-  for(const a of valid) for(const b of valid) {
+  const byStart=new Map<string,SegmentInfo[]>();
+  for(const segment of valid) {
+    const entries=byStart.get(segment.start)??[];
+    entries.push(segment);byStart.set(segment.start,entries);
+  }
+  for(const a of valid) for(const b of byStart.get(a.end)??[]) {
     if(a.end!==b.start || a.edge.mode!==b.edge.mode || a.start===b.end) continue;
     const dot=a.direction[0]*b.direction[0]+a.direction[1]*b.direction[1];
     if(dot<-.8) continue;
@@ -278,24 +295,30 @@ export function compileNetwork(source: unknown, selection: unknown, buildings: P
   addConflicts(network);
   const edgeMap=new Map(network.edges.map(e=>[e.id,e]));
   const centre=project(s.showcase.target,origin), centralRadius=s.showcase.range*0.15;
-  const starts=valid.filter(x=>x.edge.mode==='drive' && x.terminalStart && distance(x.edge.points[0],centre)>centralRadius);
-  const ends=new Set(valid.filter(x=>x.edge.mode==='drive' && x.terminalEnd && distance(x.edge.points.at(-1)!,centre)>centralRadius).map(x=>x.edge.id));
+  const ports=options.routePolicy==='ports';
+  const starts=valid.filter(x=>x.edge.mode==='drive' && x.terminalStart && (ports || distance(x.edge.points[0],centre)>centralRadius));
+  const ends=new Set(valid.filter(x=>x.edge.mode==='drive' && x.terminalEnd && (ports || distance(x.edge.points.at(-1)!,centre)>centralRadius)).map(x=>x.edge.id));
   // One directed path per walking source component avoids opposing crowds on
   // narrow paths. A sourced non-crossing loop can have off-centre entry/exit.
   const walking=valid.filter(x=>x.edge.mode==='walk'), visited=new Set<string>();
+  const walkingAt=new Map<string,SegmentInfo[]>();
+  for(const edge of walking) for(const node of [edge.start,edge.end]) {
+    const entries=walkingAt.get(node)??[];
+    entries.push(edge);walkingAt.set(node,entries);
+  }
   const walkingEnds=new Map<string,string>();
   for(const seed of walking) {
     if(visited.has(seed.start)) continue;
     const component=new Set([seed.start]), queue=[seed.start];
     while(queue.length) {
       const node=queue.shift()!;
-      for(const e of walking) if(e.start===node || e.end===node) for(const next of [e.start,e.end]) {
+      for(const e of walkingAt.get(node)??[]) for(const next of [e.start,e.end]) {
         if(!component.has(next)){component.add(next);queue.push(next);}
       }
     }
     component.forEach(id=>visited.add(id));
     const eligible=walking.filter(e=>component.has(e.start) && e.way.tags.footway!=='crossing'
-      && distance(e.edge.points[0],centre)>centralRadius && distance(e.edge.points.at(-1)!,centre)>centralRadius);
+      && (ports || distance(e.edge.points[0],centre)>centralRadius && distance(e.edge.points.at(-1)!,centre)>centralRadius));
     const start=eligible.find(e=>e.terminalStart)??eligible[0];
     if(!start) continue;
     const exit=[...eligible].filter(e=>e.end!==start.start).sort((a,b)=>
@@ -306,6 +329,10 @@ export function compileNetwork(source: unknown, selection: unknown, buildings: P
     for(const kind of start.edge.allowed) {
       const queue=[[start.edge.id]], seen=new Set<string>();
       while(queue.length) {
+        if(ports && seen.size>=4096) {
+          note([start.way.id],'ROUTE_SEARCH_LIMIT','Bounded per-entry search reached 4096 edges');
+          break;
+        }
         const path=queue.shift()!,id=path.at(-1)!;
         if(seen.has(id)) continue; seen.add(id);
         if(start.edge.mode==='drive'?ends.has(id):walkingEnds.get(start.edge.id)===id) {
@@ -329,16 +356,17 @@ export function compileNetwork(source: unknown, selection: unknown, buildings: P
       }
     }
   }
-  if(!network.routes.length) fail(`No safe entry-to-exit routes: ${JSON.stringify(diagnostics)}`);
+  if(!network.routes.length) throw new NoSafeRoutesError(diagnostics);
   for(const route of network.routes) {
     const edges=route.edges.map(id=>edgeMap.get(id)!);
     for(let i=1;i<edges.length;i++) for(const kind of route.allowed) {
       const a=edges[i-1],b=edges[i],body=ACTORS[kind];
-      validateEnvelope(sweptEnvelope([a.points.at(-2)!,a.points.at(-1)!,b.points[1]],body.length,body.width),
-        [...new Set([...a.corridor,...b.corridor])],buildings,water);
+      const sweep=sweptEnvelope([a.points.at(-2)!,a.points.at(-1)!,b.points[1]],body.length,body.width);
+      const box=polygonBounds(hull(sweep.flatMap(p=>p[0])));
+      validateEnvelope(sweep,[...new Set([...a.corridor,...b.corridor])],nearbyBuildings(box),nearbyWater(box));
     }
   }
-  note([], 'ASSUMPTIONS', `Central spawn exclusion radius=${centralRadius}m; person body=0.6x0.6m; actor dimensions=${JSON.stringify(ACTORS)}`);
+  note([], 'ASSUMPTIONS', `${ports?'Citywide entry/exit ports; visibility gating required':`Central spawn exclusion radius=${centralRadius}m`}; person body=0.6x0.6m; actor dimensions=${JSON.stringify(ACTORS)}`);
   return {network:parseNetwork(network),diagnostics};
 }
 
@@ -353,9 +381,11 @@ function addConflicts(n: Network): void {
     return [e.id,sweptEnvelope(sampled.get(e.id)!,length,width)];
   }));
   const bounds=new Map(n.edges.map(e=>[e.id,polygonBounds(hull(sweeps.get(e.id)!.flatMap(p=>p[0])))]));
+  const nearby=spatialCandidates(n.edges,e=>bounds.get(e.id)!);
+  const indices=new Map(n.edges.map((edge,index)=>[edge.id,index]));
   const candidates: {id:string;polygon:Polygon2;edges:string[]}[]=[];
-  for(let i=0;i<n.edges.length;i++) for(let j=i+1;j<n.edges.length;j++) {
-    const a=n.edges[i],b=n.edges[j];
+  for(const [i,a] of n.edges.entries()) for(const b of nearby(bounds.get(a.id)!)) {
+    if(indices.get(b.id)!<=i) continue;
     if(a.mode==='walk' && b.mode==='walk') continue;
     if(!boundsOverlap(bounds.get(a.id)!,bounds.get(b.id)!)) continue;
     // A predecessor/successor is one continuous movement; following owns spacing.

@@ -10,6 +10,11 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-21-citywide-mobility-design.md`
 
+**Execution status (2026-10-21):** Tasks 1–3 implemented on `feat/citywide-mobility`.
+The actual municipality intersects 2,232 acquisition cells. Public-service probes timed out or
+returned HTTP 406; no full-city sources or mobility release have been published. The user approved
+continuing compiler, simulation and UI implementation while leaving publication/data acceptance incomplete.
+
 ## Global Constraints
 
 - “全城”指采集、编译、覆盖清单和运行时分块机制覆盖当前苏州市边界。
@@ -122,9 +127,9 @@ Use `apply_patch` for source edits and existing runners for validation.
 `mobilityBudget(quality: SceneSettings['quality']): { vehicles: number; pedestrians: number }`,
 and `mobilityFixture(): { manifest: MobilityManifest; chunk: MobilityChunk }`.
 
-- [ ] Add a fixture wrapping a structured clone of the existing synthetic network. Declare synthetic provenance;
+- [x] Add a fixture wrapping a structured clone of the existing synthetic network. Declare synthetic provenance;
   use internally consistent cell bounds, resources and byte/hash values. Never use it as geographic evidence.
-- [ ] Add failing contract tests:
+- [x] Add failing contract tests:
 
 ```ts
 it('rejects failed publication coverage instead of hiding missing city cells', () => {
@@ -138,16 +143,16 @@ it('budgets the whole active window', () => {
 });
 ```
 
-- [ ] Run `npm test -- tests/unit/mobility-manifest.test.ts`; observe missing-contract failures.
-- [ ] Implement the interfaces above and strict parsers. Check finite ordered geographic bounds, IDs,
+- [x] Run `npm test -- tests/unit/mobility-manifest.test.ts`; observe missing-contract failures.
+- [x] Implement the interfaces above and strict parsers. Check finite ordered geographic bounds, IDs,
   matching base dataset, valid timestamps, safe URIs, positive sizes, SHA-256 shape, unique cells,
   referenced neighbours/ports, exact coverage sums, ready/resource equivalence, no failed publication,
   and nonnegative lengths. Parse the embedded network using `parseNetwork`; require every owned edge,
   local port edge and local zone alias to exist, and surface coordinates/width/height to be valid.
   Ready cells must have at least one usable route; empty/excluded cells are explicit inventory entries.
-- [ ] Test corrupted paths, dangling edges, duplicate ownership, malformed zones, future versions,
+- [x] Test corrupted paths, dangling edges, duplicate ownership, malformed zones, future versions,
   tampered totals and legitimate empty/excluded cells.
-- [ ] Run `npm test -- tests/unit/mobility-manifest.test.ts tests/unit/enhancements.test.ts`
+- [x] Run `npm test -- tests/unit/mobility-manifest.test.ts tests/unit/enhancements.test.ts`
   and `npx tsc --noEmit`; commit `feat: define audited citywide mobility contracts`.
 
 ### Task 2: Resumable Public Road Acquisition
@@ -163,7 +168,7 @@ Overpass source-node/relation handling in `pipeline/enhancements/fetch.ts`.
 `fetchMobility(options: { baseDir: string; cacheDir: string; refresh: boolean }): Promise<void>`,
 and persisted cache/progress under `data/raw/mobility/`.
 
-- [ ] Write tests intercepting public HTTP responses, not filesystem success:
+- [x] Write tests intercepting public HTTP responses, not filesystem success:
 
 ```ts
 it('does not reuse an incomplete highway response as a valid cache', async () => {
@@ -175,19 +180,19 @@ it('does not reuse an incomplete highway response as a valid cache', async () =>
   Add new tests around `fetchMobility` with temporary base/cache directories and existing `overpass`
   fixture: first response fails, retry succeeds, a second run uses the valid cache, and a different
   query/bounds/base identity causes revalidation. Assert partial replies never acquire completed status.
-- [ ] Run `npm test -- tests/unit/mobility-fetch.test.ts`; require failures in the new collector tests.
-- [ ] Implement a deterministic 0.02-degree acquisition grid intersecting the actual municipality polygon,
+- [x] Run `npm test -- tests/unit/mobility-fetch.test.ts`; require failures in the new collector tests.
+- [x] Implement a deterministic 0.02-degree acquisition grid intersecting the actual municipality polygon,
   not only its bounding rectangle. Include a bounded topology halo and full referenced way/node/restriction
   members. Fetch supported surface-road classes, independent walking ways and crossings; retain unhandled
   source elements for explicit diagnostics. Use one sequential request at a time, validated cache reuse,
   the existing 15/30-second backoff pattern and three attempts, with 300-second request timeout.
-- [ ] Validate complete responses before atomic cache writes. Record query, cell/halo, fetched time,
+- [x] Validate complete responses before atomic cache writes. Record query, cell/halo, fetched time,
   OSM timestamp and source hashes. Deduplicate by source type/ID; reject coordinate, tag or membership
   disagreements. Write the exact failed cell and retained source error to progress; throw on unrecovered
   failure. Resuming must not restart valid completed requests.
-- [ ] Add `data:mobility:fetch` for `tsx pipeline/mobility/fetch.ts`. Ignore `public/mobility/`;
+- [x] Add `data:mobility:fetch` for `tsx pipeline/mobility/fetch.ts`. Ignore `public/mobility/`;
   existing `data/raw/` already excludes caches. Document public-service use and offline runtime behavior.
-- [ ] Run targeted tests and type-check; commit `feat: acquire resumable citywide road sources`.
+- [x] Run targeted tests and type-check; commit `feat: acquire resumable citywide road sources`.
 
 ### Task 3: Automatic Validated Local Network Compilation
 
@@ -202,7 +207,7 @@ existing `compileNetwork`, `sweptEnvelope`, `validateEnvelope`, `ACTORS` and con
 buildings: Polygon2[]; water: Polygon2[]; placements: Polygon2[] }):
 { chunk?: MobilityChunk; status: CellStatus; diagnostics: Diagnostic[] }`.
 
-- [ ] Add deterministic compile tests using `routeFixture()` and `crossingFixture()` from existing fixtures:
+- [x] Add deterministic compile tests using `routeFixture()` and `crossingFixture()` from existing fixtures:
 
 ```ts
 it('compiles automatically without a hand-maintained district selection', () => {
@@ -218,22 +223,22 @@ it('compiles automatically without a hand-maintained district selection', () => 
 });
 ```
 
-- [ ] Run `npm test -- tests/unit/mobility-compile.test.ts`; observe missing compiler.
-- [ ] Build source-backed automatic selection for each bounded cell/halo: roads vs independent walk ways,
+- [x] Run `npm test -- tests/unit/mobility-compile.test.ts`; observe missing compiler.
+- [x] Build source-backed automatic selection for each bounded cell/halo: roads vs independent walk ways,
   shared-node connectivity, access/direction/turn restrictions, and crossing chains supported by source
   crossing nodes and connected side routes. Every retained/excluded way gets a reason; no handwritten
   per-district inventories.
-- [ ] Reuse existing body/turn verification and restriction behavior. Replace showcase-specific route
+- [x] Reuse existing body/turn verification and restriction behavior. Replace showcase-specific route
   endpoint policy with explicit cell ports for the citywide caller, preserving old district behavior
   and its golden tests. Use bounded route traversal rather than enumerating every citywide path.
   Build spatial candidate indexes before envelope/obstacle checks.
-- [ ] Emit source-ID-backed road/walk surfaces once per physical segment, with explicit width/elevation
+- [x] Emit source-ID-backed road/walk surfaces once per physical segment, with explicit width/elevation
   assumptions. Check complete vehicle/person envelopes against corridor, buildings, water and placements.
   Reject unknown water widths affecting candidate routes; do not ignore unbounded water lines.
-- [ ] Test no fake crossing for geometrically intersecting unshared nodes, one-way/restriction enforcement,
+- [x] Test no fake crossing for geometrically intersecting unshared nodes, one-way/restriction enforcement,
   bus exclusion on narrow turns, invalid widths, unsupported elevations, inaccessible roads, obstacle
   intrusion, walk-only cells, valid no-road cells, and incomplete input errors.
-- [ ] Run compiler and existing `enhancements.test.ts`; type-check and commit
+- [x] Run compiler and existing `enhancements.test.ts`; type-check and commit
   `feat: compile source-grounded mobility cells automatically`.
 
 ### Task 4: Stable Seam and Conflict Ownership
