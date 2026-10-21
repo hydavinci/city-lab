@@ -118,7 +118,8 @@ export async function buildMobility(options: {
   const nearbyTiles = (bounds: Bounds) => tileIndex(metricBounds(bounds));
   const generatorFiles = ['./build.ts', './compile.ts', './stitch.ts', './fetch.ts', './files.ts',
     '../enhancements/routes.ts', '../enhancements/geometry.ts', '../enhancements/build.ts',
-    '../enhancements/animation-bounds.ts', '../../web/core/enhancements.ts', '../../web/core/mobility.ts'];
+    '../enhancements/animation-bounds.ts', '../../web/core/enhancements.ts', '../../web/core/mobility.ts',
+    '../../web/core/mobility-actors.ts'];
   const generatorHash = sha256(json(await Promise.all(generatorFiles.map(async path =>
     [path, sha256(await readFile(new URL(path, import.meta.url)))]))));
   const baseHash = sha256(baseText), staticHash = sha256(json([sha256(assetBytes), sha256(assetNetworkBytes), sha256(placementBytes)]));

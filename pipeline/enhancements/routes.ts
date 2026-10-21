@@ -3,14 +3,8 @@ import type { ActorKind, Diagnostic, Edge, Network, Polygon2, XY } from '../../w
 import type { Bounds } from '../../web/core/types';
 import { validateSource } from './fetch';
 import { boundsOverlap, distance, hull, lerp, polygonBounds, polygonsIntersect, project, rectangle, spatialCandidates, sweptEnvelope, validateEnvelope } from './geometry';
-
-export const ACTORS: Record<ActorKind, { length: number; width: number; radius: number }> = {
-  'car-a': { length: 4.4, width: 1.8, radius: 5 },
-  'car-b': { length: 4.7, width: 1.9, radius: 5.5 },
-  bus: { length: 10, width: 2.5, radius: 10 },
-  'person-a': { length: 1.12, width: 0.601, radius: 0 },
-  'person-b': { length: 1.12, width: 0.601, radius: 0 },
-};
+import { ACTORS } from '../../web/core/mobility-actors';
+export { ACTORS } from '../../web/core/mobility-actors';
 interface SourceNode { type: 'node'; id: number; lon: number; lat: number; tags?: Record<string,string> }
 interface SourceWay { type: 'way'; id: number; nodes: number[]; tags: Record<string,string> }
 interface Relation { type: 'relation'; id: number; tags: Record<string,string>; members: {type:string;ref:number;role:string}[] }

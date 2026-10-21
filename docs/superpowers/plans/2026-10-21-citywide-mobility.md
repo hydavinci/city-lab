@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-21-citywide-mobility-design.md`
 
-**Execution status (2026-10-21):** Tasks 1–5 implemented on `feat/citywide-mobility`.
+**Execution status (2026-10-21):** Tasks 1–6 implemented on `feat/citywide-mobility`.
 The actual municipality intersects 2,232 acquisition cells. Public-service probes timed out or
 returned HTTP 406; no full-city sources or mobility release have been published. The user approved
 continuing compiler, simulation and UI implementation while leaving publication/data acceptance incomplete.
@@ -342,7 +342,7 @@ One `step` means exactly 0.05 simulated seconds; wall-clock scheduling belongs t
 `nextWakeTime` returns the next required simulation-time decision/arrival, or undefined when no
 time-driven work can progress; adding data or changing options independently wakes the layer.
 
-- [ ] Write deterministic movement tests using real world output:
+- [x] Write deterministic movement tests using real world output:
 
 ```ts
 it('replays the same traffic from identical seeds and fixed steps', () => {
@@ -357,20 +357,26 @@ it('replays the same traffic from identical seeds and fixed steps', () => {
 ```
 
   Separately assert nonzero travelled distance; deterministically equal empty worlds do not satisfy motion.
-- [ ] Run red. Implement seeded arrivals at valid entry positions only when body space and `canSpawn`
+- [x] Run red. Implement seeded arrivals at valid entry positions only when body space and `canSpawn`
   permit them. Counts apply globally across chunks; paths/actor kinds must satisfy route permissions.
   Queue/reduce arrivals at capacity rather than inserting overlaps.
-- [ ] Implement route-distance movement with segment heading and length accounting, acceleration/braking,
+- [x] Implement route-distance movement with segment heading and length accounting, acceleration/braking,
   full-body following and lookahead across route edges. Traverse only validated polyline segments.
   Update `walkPhase` from distance and nominal gait stride, not elapsed time while stopped.
-- [ ] Handoff at linked ports without changing actor identity. Hold before unavailable continuation,
+- [x] Handoff at linked ports without changing actor identity. Hold before unavailable continuation,
   with safe stopping distance; no teleporting, cloning or entering an unknown junction.
   Retire only at valid exits accepted by `canRetire`; retain snapshots/ownership while visible.
   Explicitly reject removing a cell still owning live visible actors; the layer must drain/retain it.
-- [ ] Test speed bounds, following at merge/edge/seam, no-spawn gate, capacity, route termination,
+- [x] Test speed bounds, following at merge/edge/seam, no-spawn gate, capacity, route termination,
   two origins, unavailable neighbour, no loops invented at endpoints, source-mode restrictions,
   snapshot isolation and zero resources after clear.
-- [ ] Run pure world tests and type-check; commit `feat: simulate deterministic nearby vehicle and pedestrian movement`.
+- [x] Run pure world tests and type-check; commit `feat: simulate deterministic nearby vehicle and pedestrian movement`.
+
+Implementation note: actor dimensions are shared through a browser-safe module, with the existing
+pipeline export preserved. Body occupancy includes leading/trailing portions across edges and seams.
+Budget reductions stop new admission immediately but retain visible live actors until they can drain
+safely; disabled arrivals do not erase actors. Junction/crossing arbitration remains Task 7, and this
+core is not exposed on the homepage until reservations, rendering and lifecycle integration are ready.
 
 ### Task 7: Shared Conflict Reservations and Fair Progress
 
