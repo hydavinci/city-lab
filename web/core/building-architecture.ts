@@ -57,7 +57,7 @@ function windowGrid(length: number, top: number, style: CityStyle, density: numb
 }
 
 function wall(
-  mesh: ArchitectureMeshWriter, edge: WallEdge, top: number, style: CityStyle, near: boolean, density: number, seed: number,
+  mesh: ArchitectureMeshWriter, edge: WallEdge, top: number, style: CityStyle, near: boolean, density: number, seed: number, facade: number,
 ): void {
   const [a, b] = [edge.start, edge.end], length = Math.hypot(b[0] - a[0], b[1] - a[1]);
   const dx = (b[0] - a[0]) / length, dy = (b[1] - a[1]) / length;
@@ -92,7 +92,7 @@ function wall(
       const p = opening[i], q = opening[(i + 1) % 4];
       mesh.face([point(p[0], p[1]), point(q[0], q[1]), point(q[0], q[1], recess + 0.08), point(p[0], p[1], recess + 0.08)], WALL);
     }
-    face(x0, x1, low, high, (seed + bay * 3 + level * 5) % 5 < 3 ? WARM : DARK, recess);
+    face(x0, x1, low, high, (seed + facade + bay * 3 + level * 2) % 5 < 3 ? WARM : DARK, recess);
     if (!near) continue;
     const frame = style === 'historic' ? 0.07 : 0.055;
     block(x0, x0 + frame, low, high, FRAME); block(x1 - frame, x1, low, high, FRAME);
@@ -207,7 +207,7 @@ export function emitArchitecture(mesh: ArchitectureMeshWriter, feature: Building
     density *= 0.8;
   }
   const totalLength = patches.reduce((sum, p) => sum + Math.hypot(p[1][0] - p[0][0], p[1][1] - p[0][1]), 0);
-  for (const edge of edges) wall(mesh, edge, top - rise, style, near, density, seed);
+  for (const [facade, edge] of edges.entries()) wall(mesh, edge, top - rise, style, near, density, seed, facade);
   for (const patch of patches) {
     roof(mesh, patch, top, rise, style, near, Math.min(1, 180 / Math.max(1, totalLength)));
     mesh.face([...patch].reverse().map(([x, y]): XYZ => [x, y, 0.5]), STONE);

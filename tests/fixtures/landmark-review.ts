@@ -68,6 +68,38 @@ const review = {
   async ready() {
     return (await mainScene().screenshot()).size;
   },
+  async windowLight(id: string) {
+    const record = definition(id), scene = mainScene(), native = architecture();
+    const image = await createImageBitmap(await scene.screenshot()), canvas = document.createElement('canvas');
+    canvas.width = image.width; canvas.height = image.height;
+    const context = canvas.getContext('2d')!;
+    context.drawImage(image, 0, 0);
+    image.close();
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    const scaleX = canvas.width / scene.viewer.canvas.clientWidth, scaleY = canvas.height / scene.viewer.canvas.clientHeight;
+    const [west, south, east, north] = record.bounds;
+    const corners = [west, east].flatMap(lng => [south, north].flatMap(lat => [0, record.height].flatMap(height => {
+      const point = scene.viewer.scene.cartesianToCanvasCoordinates(Cartesian3.fromDegrees(lng, lat, height));
+      return point ? [{ x: point.x * scaleX, y: point.y * scaleY }] : [];
+    })));
+    if (corners.length !== 8) throw new Error(`Could not project review building: ${id}`);
+    const left = Math.max(0, Math.floor(Math.min(...corners.map(point => point.x))));
+    const right = Math.min(canvas.width - 1, Math.ceil(Math.max(...corners.map(point => point.x))));
+    const top = Math.max(0, Math.floor(Math.min(...corners.map(point => point.y))));
+    const bottom = Math.min(canvas.height - 1, Math.ceil(Math.max(...corners.map(point => point.y))));
+    const candidates: Cartesian2[] = [];
+    for (let y = top; y <= bottom; y += 2) for (let x = left; x <= right; x += 2) {
+      const offset = (y * canvas.width + x) * 4, [r, g, b] = pixels.subarray(offset, offset + 3);
+      if (r > 100 && g > 45 && r > g * 1.15 && g > b * 1.4) candidates.push(new Cartesian2(x / scaleX, y / scaleY));
+    }
+    let ownedSamples = 0;
+    const stride = Math.max(1, Math.ceil(candidates.length / 64));
+    for (let i = 0; i < candidates.length; i += stride) {
+      const picked = native.selected(scene.viewer.scene.pick(candidates[i], 1, 1));
+      if (picked?.id === record.sourceId) ownedSamples++;
+    }
+    return { warmSamples: candidates.length, ownedSamples };
+  },
   async location(lng: number, lat: number, range: number) {
     const scene = mainScene();
     scene.viewer.camera.lookAt(Cartesian3.fromDegrees(lng, lat),

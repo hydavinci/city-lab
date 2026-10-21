@@ -14,6 +14,7 @@
     "data:enhancements:fetch": "tsx pipeline/enhancements/fetch.ts",
     "data:enhancements:build": "tsx pipeline/enhancements/build.ts",
     "data:architecture:build": "tsx pipeline/architecture/build.ts",
+    "data:highrises:build": "tsx pipeline/architecture/highrise-coverage.ts",
     "data:build": "tsx pipeline/build.ts"
   },
   "dependencies": {

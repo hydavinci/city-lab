@@ -232,9 +232,9 @@ export function App() {
           {selected.model.sources.map(source => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.label}<ArrowUpRight size={12} /></a>)}
         </>}
         {selected.heightReference && <>
-          <dl><div><dt>参考建筑高度</dt><dd>{selected.heightReference.height} m</dd></div>
+          <dl><div><dt>参考建筑高度</dt><dd>{selected.heightReference.approximate ? '约 ' : ''}{selected.heightReference.height} m</dd></div>
             {selected.heightReference.floors !== undefined && <div><dt>地上楼层</dt><dd>{selected.heightReference.floors} 层</dd></div>}
-            <div><dt>高度依据</dt><dd>资料核实 · 通用高度插件</dd></div>
+            <div><dt>高度依据</dt><dd>{selected.heightReference.approximate ? '资料约值' : '资料核实'} · 通用高度插件</dd></div>
             <div><dt>资料核对日期</dt><dd>{selected.heightReference.checkedAt}</dd></div></dl>
           <p className="section-note">保留 OSM 轮廓，通用参数化外形；建筑总高有资料依据，立面、塔冠与窗格并非实测还原。</p>
           {selected.heightReference.sources.map(source => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.label}<ArrowUpRight size={12} /></a>)}

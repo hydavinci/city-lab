@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { buildArchitecture } from '../../web/core/building-architecture';
+import { buildArchitecture, emitArchitecture, type ArchitectureLod } from '../../web/core/building-architecture';
+import { ArchitecturalMesh } from '../../web/core/architectural-mesh';
 import { polygonArea, projectRings, type XY } from '../../web/core/architectural-geometry';
 import type { BuildingFeature } from '../../web/core/types';
 
@@ -59,7 +60,68 @@ function inside(point: XY, ring: XY[]): boolean {
   return result;
 }
 
+function windowOccupancy(feature: BuildingFeature, lod: ArchitectureLod) {
+  const mesh = new ArchitecturalMesh();
+  emitArchitecture(mesh, feature, lod);
+  const panes: { facade: string; column: string; height: number; warm: boolean }[] = [];
+  for (const [material, surface] of mesh.getSurfaces()) {
+    if (material !== 5 && material !== 6) continue;
+    for (let i = 0; i < surface.positions.length; i += 18) {
+      const points = Array.from({ length: 6 }, (_, vertex) => surface.positions.slice(i + vertex * 3, i + vertex * 3 + 3));
+      const centre = [0, 1, 2].map(axis => points.reduce((sum, point) => sum + point[axis], 0) / 6);
+      panes.push({
+        facade: surface.normals.slice(i, i + 3).map(value => value.toFixed(5)).join(','),
+        column: centre.slice(0, 2).map(value => value.toFixed(3)).join(','),
+        height: centre[2], warm: material === 5,
+      });
+    }
+  }
+  return panes;
+}
+
 describe('full city architectural bodies', () => {
+  it.each(['far', 'mid', 'near'] as const)('varies sparse %s windows vertically and between facades without exceeding the cell budget', lod => {
+    for (let id = 1; id <= 20; id++) {
+      const feature = fixture('office', 200);
+      feature.properties.id = `way/${id}`;
+      const panes = windowOccupancy(feature, lod);
+      expect(panes.length).toBeLessThanOrEqual({ far: 8, mid: 48, near: 160 }[lod]);
+      const warm = panes.filter(pane => pane.warm).length;
+      expect(warm / panes.length).toBeGreaterThanOrEqual(0.3);
+      expect(warm / panes.length).toBeLessThanOrEqual(0.8);
+      const patterns = new Set<string>();
+      for (const facade of new Set(panes.map(pane => pane.facade))) {
+        const windows = panes.filter(pane => pane.facade === facade);
+        for (const column of new Set(windows.map(pane => pane.column))) {
+          const vertical = windows.filter(pane => pane.column === column).sort((a, b) => a.height - b.height);
+          expect(vertical.length).toBeGreaterThanOrEqual(2);
+          expect(vertical.some(pane => pane.warm), `${lod} ${feature.properties.id}: all-dark vertical column`).toBe(true);
+          if (vertical.length >= 5) expect(vertical.some(pane => !pane.warm)).toBe(true);
+          patterns.add(vertical.map(pane => Number(pane.warm)).join(''));
+        }
+      }
+      expect(patterns.size, 'every facade repeats the same occupied floors').toBeGreaterThan(1);
+      expect(windowOccupancy(feature, lod)).toEqual(panes);
+    }
+  });
+
+  it.each([
+    ['4828_1253', 'way/802754584'], ['4823_1252', 'way/822365267'],
+    ['4822_1251', 'way/475616606'], ['4822_1251', 'way/475616607'],
+    ['4822_1251', 'way/475616603'], ['4822_1251', 'way/475616604'],
+    ['4828_1252', 'way/482784883'], ['4828_1252', 'way/482784884'], ['4828_1252', 'way/482784885'],
+  ])('keeps real high-rise %s / %s lit but not fully occupied at every LOD', (tileId, sourceId) => {
+    const tile = JSON.parse(readFileSync(`public/data/c8a953228b2ff6af/tiles/${tileId}.json`, 'utf8')) as {
+      features: BuildingFeature[];
+    };
+    const feature = tile.features.find(feature => feature.properties.id === sourceId)!;
+    for (const lod of ['far', 'mid', 'near'] as const) {
+      const panes = windowOccupancy(feature, lod);
+      expect(panes.some(pane => pane.warm), `${sourceId} ${lod} has no lit windows`).toBe(true);
+      expect(panes.some(pane => !pane.warm), `${sourceId} ${lod} has no unlit windows`).toBe(true);
+    }
+  });
+
   it.each([
     ['yes', 12.8, 'historic'], ['apartments', 35, 'residential'], ['office', 80, 'office'],
     ['retail', 15, 'commercial'], ['industrial', 16, 'industrial'], ['unknown', 25, 'neutral'],

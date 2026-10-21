@@ -1,0 +1,1597 @@
+{
+  "version": 1,
+  "scope": {
+    "municipality": "Suzhou prefecture",
+    "minimumHeight": 100,
+    "uses": "all, residential included",
+    "completedOnly": true,
+    "industrialTestTowers": "separately classified; not ordinary occupied buildings"
+  },
+  "baselineComplete": false,
+  "checkedAt": "2026-10-20",
+  "limitations": [
+    "没有可复核的全市逐栋权威完整基线，不发布覆盖率或宣称所有高楼已补齐。",
+    "候选数包含待核实的项目线索，不能等同于实际塔楼数；高度上限不等于实际高度。",
+    "CTBUH 公开地图坐标按 Esri/OSM 底图解释为 WGS84 兼容，出版方未明确声明基准；不据最近距离自动匹配。",
+    "未知与旧在建报道不代表当前仍在建；未核实完工的候选不新增为建成模型。",
+    "原始 OSM 中可能已有未建成项目的设计高度，原值保留但不计为已核实建成覆盖。"
+  ],
+  "regions": {
+    "gusu": {
+      "candidates": 2,
+      "reference": 1,
+      "landmark": 0,
+      "source": 0,
+      "gaps": 1,
+      "gapsByReason": {
+        "missing-footprint": 0,
+        "merged-podium": 0,
+        "height-conflict": 0,
+        "unverified-identity": 0,
+        "completion-unverified": 0,
+        "height-unverified": 1,
+        "not-completed": 0
+      },
+      "exhaustive": false,
+      "limitation": "公开候选清单非权威完整基线；未列出的建筑、住宅及缺少独立轮廓的塔楼仍可能遗漏。0 条核实不代表该区域无高楼。"
+    },
+    "huqiu": {
+      "candidates": 7,
+      "reference": 4,
+      "landmark": 0,
+      "source": 0,
+      "gaps": 3,
+      "gapsByReason": {
+        "missing-footprint": 1,
+        "merged-podium": 1,
+        "height-conflict": 0,
+        "unverified-identity": 1,
+        "completion-unverified": 0,
+        "height-unverified": 0,
+        "not-completed": 0
+      },
+      "exhaustive": false,
+      "limitation": "公开候选清单非权威完整基线；未列出的建筑、住宅及缺少独立轮廓的塔楼仍可能遗漏。0 条核实不代表该区域无高楼。"
+    },
+    "wuzhong": {
+      "candidates": 0,
+      "reference": 0,
+      "landmark": 0,
+      "source": 0,
+      "gaps": 0,
+      "gapsByReason": {
+        "missing-footprint": 0,
+        "merged-podium": 0,
+        "height-conflict": 0,
+        "unverified-identity": 0,
+        "completion-unverified": 0,
+        "height-unverified": 0,
+        "not-completed": 0
+      },
+      "exhaustive": false,
+      "limitation": "公开候选清单非权威完整基线；未列出的建筑、住宅及缺少独立轮廓的塔楼仍可能遗漏。0 条核实不代表该区域无高楼。"
+    },
+    "xiangcheng": {
+      "candidates": 1,
+      "reference": 0,
+      "landmark": 0,
+      "source": 0,
+      "gaps": 1,
+      "gapsByReason": {
+        "missing-footprint": 0,
+        "merged-podium": 1,
+        "height-conflict": 0,
+        "unverified-identity": 0,
+        "completion-unverified": 0,
+        "height-unverified": 0,
+        "not-completed": 0
+      },
+      "exhaustive": false,
+      "limitation": "公开候选清单非权威完整基线；未列出的建筑、住宅及缺少独立轮廓的塔楼仍可能遗漏。0 条核实不代表该区域无高楼。"
+    },
+    "wujiang": {
+      "candidates": 1,
+      "reference": 0,
+      "landmark": 0,
+      "source": 0,
+      "gaps": 1,
+      "gapsByReason": {
+        "missing-footprint": 0,
+        "merged-podium": 0,
+        "height-conflict": 1,
+        "unverified-identity": 0,
+        "completion-unverified": 0,
+        "height-unverified": 0,
+        "not-completed": 0
+      },
+      "exhaustive": false,
+      "limitation": "公开候选清单非权威完整基线；未列出的建筑、住宅及缺少独立轮廓的塔楼仍可能遗漏。0 条核实不代表该区域无高楼。"
+    },
+    "industrial-park": {
+      "candidates": 8,
+      "reference": 5,
+      "landmark": 0,
+      "source": 0,
+      "gaps": 3,
+      "gapsByReason": {
+        "missing-footprint": 1,
+        "merged-podium": 1,
+        "height-conflict": 0,
+        "unverified-identity": 0,
+        "completion-unverified": 0,
+        "height-unverified": 0,
+        "not-completed": 1
+      },
+      "exhaustive": false,
+      "limitation": "公开候选清单非权威完整基线；未列出的建筑、住宅及缺少独立轮廓的塔楼仍可能遗漏。0 条核实不代表该区域无高楼。"
+    },
+    "kunshan": {
+      "candidates": 4,
+      "reference": 0,
+      "landmark": 0,
+      "source": 0,
+      "gaps": 4,
+      "gapsByReason": {
+        "missing-footprint": 1,
+        "merged-podium": 0,
+        "height-conflict": 0,
+        "unverified-identity": 2,
+        "completion-unverified": 0,
+        "height-unverified": 0,
+        "not-completed": 1
+      },
+      "exhaustive": false,
+      "limitation": "公开候选清单非权威完整基线；未列出的建筑、住宅及缺少独立轮廓的塔楼仍可能遗漏。0 条核实不代表该区域无高楼。"
+    },
+    "changshu": {
+      "candidates": 1,
+      "reference": 0,
+      "landmark": 0,
+      "source": 0,
+      "gaps": 1,
+      "gapsByReason": {
+        "missing-footprint": 1,
+        "merged-podium": 0,
+        "height-conflict": 0,
+        "unverified-identity": 0,
+        "completion-unverified": 0,
+        "height-unverified": 0,
+        "not-completed": 0
+      },
+      "exhaustive": false,
+      "limitation": "公开候选清单非权威完整基线；未列出的建筑、住宅及缺少独立轮廓的塔楼仍可能遗漏。0 条核实不代表该区域无高楼。"
+    },
+    "zhangjiagang": {
+      "candidates": 5,
+      "reference": 2,
+      "landmark": 0,
+      "source": 0,
+      "gaps": 3,
+      "gapsByReason": {
+        "missing-footprint": 0,
+        "merged-podium": 0,
+        "height-conflict": 0,
+        "unverified-identity": 0,
+        "completion-unverified": 1,
+        "height-unverified": 0,
+        "not-completed": 2
+      },
+      "exhaustive": false,
+      "limitation": "公开候选清单非权威完整基线；未列出的建筑、住宅及缺少独立轮廓的塔楼仍可能遗漏。0 条核实不代表该区域无高楼。"
+    },
+    "taicang": {
+      "candidates": 2,
+      "reference": 0,
+      "landmark": 0,
+      "source": 0,
+      "gaps": 2,
+      "gapsByReason": {
+        "missing-footprint": 1,
+        "merged-podium": 0,
+        "height-conflict": 0,
+        "unverified-identity": 1,
+        "completion-unverified": 0,
+        "height-unverified": 0,
+        "not-completed": 0
+      },
+      "exhaustive": false,
+      "limitation": "公开候选清单非权威完整基线；未列出的建筑、住宅及缺少独立轮廓的塔楼仍可能遗漏。0 条核实不代表该区域无高楼。"
+    }
+  },
+  "totals": {
+    "candidates": 31,
+    "reference": 12,
+    "landmark": 0,
+    "source": 0,
+    "gaps": 19,
+    "gapsByReason": {
+      "missing-footprint": 5,
+      "merged-podium": 3,
+      "height-conflict": 1,
+      "unverified-identity": 4,
+      "completion-unverified": 1,
+      "height-unverified": 1,
+      "not-completed": 4
+    }
+  },
+  "entries": [
+    {
+      "id": "ctbuh-18927",
+      "name": "苏州中心 · The Summit（39 层塔楼）",
+      "region": "industrial-park",
+      "use": "mixed",
+      "status": "completed",
+      "checkedAt": "2026-10-20",
+      "height": 166.9,
+      "heightKind": "architectural",
+      "floors": 39,
+      "sourceId": "way/505305793",
+      "match": "reference",
+      "note": "CTBUH map marker 120.665062,31.316860 lies inside the separate southern tower footprint. The architect distinguishes the 39-floor tower from the 16-floor parcel. Satellite imagery confirms this independent outline; the northern 80.6 m building way/462717404 is not changed.",
+      "sources": [
+        {
+          "label": "CTBUH · 2017 年建成、166.9 m / 39 层",
+          "url": "https://www.skyscrapercenter.com/building/the-summit-plot-554/18927"
+        },
+        {
+          "label": "CTBUH · 独立塔楼位置",
+          "url": "https://www.skyscrapercenter.com/map/building/18927"
+        },
+        {
+          "label": "GP · 双地块与塔楼设计",
+          "url": "https://www.gpchicago.com/architecture/summit/"
+        }
+      ],
+      "coverage": "reference",
+      "originalHeight": 12.8,
+      "originalBasis": "fallback",
+      "renderedHeight": 166.9
+    },
+    {
+      "id": "ctbuh-43634",
+      "name": "张家港汇金中心 1 号楼",
+      "region": "zhangjiagang",
+      "use": "mixed",
+      "status": "completed",
+      "checkedAt": "2026-10-20",
+      "height": 188,
+      "heightKind": "architectural",
+      "sourceId": "way/822635143",
+      "match": "reference",
+      "note": "CTBUH map marker 120.570267,31.873356 lies inside the independent western tower footprint. Tower 2 has its own eastern footprint and marker; the distinct shared podium way/822635142 is not raised. No independently verified floor count is asserted.",
+      "sources": [
+        {
+          "label": "CTBUH · 2019 年建成、188 m",
+          "url": "https://www.skyscrapercenter.com/building/huijin-center-tower-1/43634"
+        },
+        {
+          "label": "CTBUH · 1 号楼位置",
+          "url": "https://www.skyscrapercenter.com/map/building/43634"
+        }
+      ],
+      "coverage": "reference",
+      "originalHeight": 12.8,
+      "originalBasis": "fallback",
+      "renderedHeight": 188
+    },
+    {
+      "id": "ctbuh-43597",
+      "name": "张家港汇金中心 2 号楼",
+      "region": "zhangjiagang",
+      "use": "mixed",
+      "status": "completed",
+      "checkedAt": "2026-10-20",
+      "height": 188,
+      "heightKind": "architectural",
+      "sourceId": "way/822635144",
+      "match": "reference",
+      "note": "CTBUH map marker 120.571617,31.873014 lies inside the independent eastern tower footprint. Tower 1 has its own western footprint and marker; the distinct shared podium way/822635142 is not raised. No independently verified floor count is asserted.",
+      "sources": [
+        {
+          "label": "CTBUH · 2021 年建成、188 m",
+          "url": "https://www.skyscrapercenter.com/building/huijin-center-tower-2/43597"
+        },
+        {
+          "label": "CTBUH · 2 号楼位置",
+          "url": "https://www.skyscrapercenter.com/map/building/43597"
+        }
+      ],
+      "coverage": "reference",
+      "originalHeight": 12.8,
+      "originalBasis": "fallback",
+      "renderedHeight": 188
+    },
+    {
+      "id": "reference-way-802754584",
+      "name": "苏州 ICC",
+      "region": "industrial-park",
+      "use": "mixed",
+      "status": "completed",
+      "checkedAt": "2026-10-20",
+      "height": 303.2,
+      "heightKind": "architectural",
+      "floors": 68,
+      "sourceId": "way/802754584",
+      "match": "reference",
+      "note": "CTBUH WGS84 marker 120.711411,31.325821 lies inside this tower footprint, 10.8 m from its centroid.",
+      "sources": [
+        {
+          "label": "CTBUH · 建筑高度与楼层",
+          "url": "https://www.skyscrapercenter.com/building/suzhou-icc/10738"
+        },
+        {
+          "label": "CTBUH · 建筑位置",
+          "url": "https://www.skyscrapercenter.com/map/building/10738"
+        }
+      ],
+      "coverage": "reference",
+      "originalHeight": 12.8,
+      "originalBasis": "fallback",
+      "renderedHeight": 303.2
+    },
+    {
+      "id": "reference-way-822365267",
+      "name": "苏州恒和广场",
+      "region": "gusu",
+      "use": "mixed",
+      "status": "completed",
+      "checkedAt": "2026-10-20",
+      "height": 175,
+      "heightKind": "architectural",
+      "floors": 48,
+      "sourceId": "way/822365267",
+      "match": "reference",
+      "note": "CTBUH WGS84 marker 120.579239,31.305651 lies inside this tower footprint, 3.2 m from its centroid. The overlapping larger podium way/822365266 is not raised.",
+      "sources": [
+        {
+          "label": "CTBUH · 建筑高度与楼层",
+          "url": "https://www.skyscrapercenter.com/building/suzhou-henghe-plaza/2529"
+        },
+        {
+          "label": "CTBUH · 建筑位置",
+          "url": "https://www.skyscrapercenter.com/map/building/2529"
+        }
+      ],
+      "coverage": "reference",
+      "originalHeight": 12.8,
+      "originalBasis": "fallback",
+      "renderedHeight": 175
+    },
+    {
+      "id": "reference-way-475616606",
+      "name": "苏州新地中心（西塔）",
+      "region": "huqiu",
+      "use": "mixed",
+      "status": "completed",
+      "checkedAt": "2026-10-20",
+      "height": 232,
+      "heightKind": "architectural",
+      "floors": 54,
+      "sourceId": "way/475616606",
+      "match": "reference",
+      "note": "CTBUH WGS84 marker 120.554291,31.294689 lies inside the separate western tower footprint of Suzhou Xindi Center. Satellite imagery distinguishes it from the eastern tower and shared podium way/475616608, which is not raised.",
+      "sources": [
+        {
+          "label": "CTBUH · 建筑高度与楼层",
+          "url": "https://www.skyscrapercenter.com/building/suzhou-xindi-center/1081"
+        },
+        {
+          "label": "CTBUH · 建筑位置",
+          "url": "https://www.skyscrapercenter.com/map/building/1081"
+        }
+      ],
+      "coverage": "reference",
+      "originalHeight": 12.8,
+      "originalBasis": "fallback",
+      "renderedHeight": 232
+    },
+    {
+      "id": "reference-way-475616607",
+      "name": "苏州国际商务中心东塔",
+      "region": "huqiu",
+      "use": "mixed",
+      "status": "completed",
+      "checkedAt": "2026-10-20",
+      "height": 125,
+      "heightKind": "architectural",
+      "floors": 28,
+      "sourceId": "way/475616607",
+      "match": "reference",
+      "note": "CTBUH WGS84 marker 120.555099,31.294580 lies inside the separate eastern tower footprint of Suzhou International Commerce Center. Satellite imagery distinguishes it from the western tower and shared podium way/475616608, which is not raised.",
+      "sources": [
+        {
+          "label": "CTBUH · 建筑高度与楼层",
+          "url": "https://www.skyscrapercenter.com/building/suzhou-international-commerce-center-east-tower/14490"
+        },
+        {
+          "label": "CTBUH · 建筑位置",
+          "url": "https://www.skyscrapercenter.com/map/building/14490"
+        }
+      ],
+      "coverage": "reference",
+      "originalHeight": 12.8,
+      "originalBasis": "fallback",
+      "renderedHeight": 125
+    },
+    {
+      "id": "reference-way-475616603",
+      "name": "Metropolitan Tower A",
+      "region": "huqiu",
+      "use": "mixed",
+      "status": "completed",
+      "checkedAt": "2026-10-20",
+      "height": 210,
+      "heightKind": "architectural",
+      "floors": 52,
+      "sourceId": "way/475616603",
+      "match": "reference",
+      "note": "CTBUH WGS84 marker 120.555153,31.293640 lies inside the separate northeastern tower footprint of the Metropolitan complex south of Suzhou Xindi Center. Satellite imagery distinguishes it from Tower B and shared podium way/475616605, which is not raised.",
+      "sources": [
+        {
+          "label": "CTBUH · 建筑高度与楼层",
+          "url": "https://www.skyscrapercenter.com/building/metropolitan-tower-a/1453"
+        },
+        {
+          "label": "CTBUH · 建筑位置",
+          "url": "https://www.skyscrapercenter.com/map/building/1453"
+        }
+      ],
+      "coverage": "reference",
+      "originalHeight": 12.8,
+      "originalBasis": "fallback",
+      "renderedHeight": 210
+    },
+    {
+      "id": "reference-way-475616604",
+      "name": "Metropolitan Tower B",
+      "region": "huqiu",
+      "use": "mixed",
+      "status": "completed",
+      "checkedAt": "2026-10-20",
+      "height": 210,
+      "heightKind": "architectural",
+      "floors": 52,
+      "sourceId": "way/475616604",
+      "match": "reference",
+      "note": "CTBUH WGS84 marker 120.554672,31.292971 lies inside the separate southwestern tower footprint of the Metropolitan complex south of Suzhou Xindi Center. Satellite imagery distinguishes it from Tower A and shared podium way/475616605, which is not raised.",
+      "sources": [
+        {
+          "label": "CTBUH · 建筑高度与楼层",
+          "url": "https://www.skyscrapercenter.com/building/metropolitan-tower-b/1454"
+        },
+        {
+          "label": "CTBUH · 建筑位置",
+          "url": "https://www.skyscrapercenter.com/map/building/1454"
+        }
+      ],
+      "coverage": "reference",
+      "originalHeight": 12.8,
+      "originalBasis": "fallback",
+      "renderedHeight": 210
+    },
+    {
+      "id": "reference-way-482784883",
+      "name": "圆融星座 · 西公寓塔",
+      "region": "industrial-park",
+      "use": "residential",
+      "status": "completed",
+      "checkedAt": "2026-10-20",
+      "height": 100,
+      "heightKind": "project-description",
+      "approximate": true,
+      "sourceId": "way/482784883",
+      "match": "reference",
+      "note": "The architect project photo and Esri World Imagery distinguish the western apartment tower from the southern apartment tower and northeastern office tower. Its independent frozen OSM footprint is separate from shared podium way/482784880. Jangho describes both apartment towers as approximately 100 m; no floor count is asserted.",
+      "sources": [
+        {
+          "label": "江河幕墙 · 两座公寓约 100 m",
+          "url": "https://mcw.jangho.com/html/gongchengyeji/guoneigongcheng/2013/0114/398.html"
+        },
+        {
+          "label": "中衡设计 · 圆融星座塔楼布局",
+          "url": "https://www.artsgroup.cn/zhonghengdongtai/zhonghengxinwen/2024-07-03/1167.html"
+        }
+      ],
+      "coverage": "reference",
+      "originalHeight": 12.8,
+      "originalBasis": "fallback",
+      "renderedHeight": 100
+    },
+    {
+      "id": "reference-way-482784884",
+      "name": "圆融星座 · 南公寓塔",
+      "region": "industrial-park",
+      "use": "residential",
+      "status": "completed",
+      "checkedAt": "2026-10-20",
+      "height": 100,
+      "heightKind": "project-description",
+      "approximate": true,
+      "sourceId": "way/482784884",
+      "match": "reference",
+      "note": "The architect project photo and Esri World Imagery distinguish the southern apartment tower from the western apartment tower and northeastern office tower. Its independent frozen OSM footprint is separate from shared podium way/482784880. Jangho describes both apartment towers as approximately 100 m; no floor count is asserted.",
+      "sources": [
+        {
+          "label": "江河幕墙 · 两座公寓约 100 m",
+          "url": "https://mcw.jangho.com/html/gongchengyeji/guoneigongcheng/2013/0114/398.html"
+        },
+        {
+          "label": "中衡设计 · 圆融星座塔楼布局",
+          "url": "https://www.artsgroup.cn/zhonghengdongtai/zhonghengxinwen/2024-07-03/1167.html"
+        }
+      ],
+      "coverage": "reference",
+      "originalHeight": 12.8,
+      "originalBasis": "fallback",
+      "renderedHeight": 100
+    },
+    {
+      "id": "reference-way-482784885",
+      "name": "圆融星座 · 办公塔",
+      "region": "industrial-park",
+      "use": "mixed",
+      "status": "completed",
+      "checkedAt": "2026-10-20",
+      "height": 160,
+      "heightKind": "architectural",
+      "sourceId": "way/482784885",
+      "match": "reference",
+      "note": "The architect project photo and Esri World Imagery identify the northeastern glazed office tower, distinct from the two apartment towers and shared podium way/482784880. Use the Jangho project table height of 160 m, not its rounded narrative of approximately 150 m; no floor count is asserted.",
+      "sources": [
+        {
+          "label": "江河幕墙 · 项目表建筑高度 160 m",
+          "url": "https://mcw.jangho.com/html/gongchengyeji/guoneigongcheng/2013/0114/398.html"
+        },
+        {
+          "label": "中衡设计 · 圆融星座塔楼布局",
+          "url": "https://www.artsgroup.cn/zhonghengdongtai/zhonghengxinwen/2024-07-03/1167.html"
+        }
+      ],
+      "coverage": "reference",
+      "originalHeight": 12.8,
+      "originalBasis": "fallback",
+      "renderedHeight": 160
+    },
+    {
+      "id": "ctbuh-41266",
+      "name": "苏州星俪酒店",
+      "region": "xiangcheng",
+      "use": "hotel",
+      "status": "completed",
+      "height": 234,
+      "floors": 57,
+      "heightKind": "architectural",
+      "checkedAt": "2026-10-20",
+      "sourceId": "way/1189391320",
+      "gap": "merged-podium",
+      "note": "来源标注 2023 年建成；位置点落在包含大面积裙楼的合并轮廓内，不能将整块轮廓抬至 234 m。",
+      "sources": [
+        {
+          "label": "CTBUH · 建筑资料",
+          "url": "https://www.skyscrapercenter.com/building/suzhou-xingli-hotel/41266"
+        },
+        {
+          "label": "CTBUH · 建筑位置",
+          "url": "https://www.skyscrapercenter.com/map/building/41266"
+        }
+      ],
+      "coverage": "gap",
+      "originalHeight": 12.8,
+      "originalBasis": "fallback",
+      "renderedHeight": 12.8
+    },
+    {
+      "id": "ctbuh-19852",
+      "name": "CSSD Plaza",
+      "region": "industrial-park",
+      "use": "office",
+      "status": "completed",
+      "height": 222,
+      "floors": 47,
+      "heightKind": "architectural",
+      "checkedAt": "2026-10-20",
+      "sourceId": "way/1239575716",
+      "gap": "merged-podium",
+      "note": "来源标注 2015 年建成；现有轮廓可能包含相接裙楼，独立塔楼基底尚未确认，暂不抬高。",
+      "sources": [
+        {
+          "label": "CTBUH · 建筑资料",
+          "url": "https://www.skyscrapercenter.com/building/cssd-plaza/19852"
+        },
+        {
+          "label": "CTBUH · 建筑位置",
+          "url": "https://www.skyscrapercenter.com/map/building/19852"
+        }
+      ],
+      "coverage": "gap",
+      "originalHeight": 12.8,
+      "originalBasis": "fallback",
+      "renderedHeight": 12.8
+    },
+    {
+      "id": "ctbuh-14408",
+      "name": "天都广场 1 号楼",
+      "region": "huqiu",
+      "use": "mixed",
+      "status": "completed",
+      "height": 217,
+      "heightKind": "architectural",
+      "checkedAt": "2026-10-20",
+      "gap": "unverified-identity",
+      "note": "来源标注 2018 年建成；公开位置页未提供可核实标记，尚未确认独立塔楼轮廓。",
+      "sources": [
+        {
+          "label": "CTBUH · 建筑资料",
+          "url": "https://www.skyscrapercenter.com/building/tiandu-plaza-tower-1/14408"
+        },
+        {
+          "label": "CTBUH · 建筑位置",
+          "url": "https://www.skyscrapercenter.com/map/building/14408"
+        }
+      ],
+      "coverage": "gap"
+    },
+    {
+      "id": "ctbuh-43600",
+      "name": "Days Mansion Tower A",
+      "region": "huqiu",
+      "use": "mixed",
+      "status": "completed",
+      "height": 217,
+      "heightKind": "architectural",
+      "checkedAt": "2026-10-20",
+      "gap": "missing-footprint",
+      "note": "来源标注 2019 年建成、长江路 211 号；位置点周围未找到可用的冻结建筑轮廓。",
+      "sources": [
+        {
+          "label": "CTBUH · 建筑资料",
+          "url": "https://www.skyscrapercenter.com/building/days-mansion-tower-a/43600"
+        },
+        {
+          "label": "CTBUH · 建筑位置",
+          "url": "https://www.skyscrapercenter.com/map/building/43600"
+        }
+      ],
+      "coverage": "gap"
+    },
+    {
+      "id": "ctbuh-42345",
+      "name": "苏州龙湖中心",
+      "region": "huqiu",
+      "use": "mixed",
+      "status": "unknown",
+      "height": 212.5,
+      "floors": 46,
+      "heightKind": "architectural",
+      "checkedAt": "2026-10-20",
+      "sourceId": "way/927239527",
+      "gap": "merged-podium",
+      "note": "已核实来源高度与楼层；本轮未取得独立完工状态证据。位置点落在约 190×150 m 商场合并轮廓内，不能整块抬高。",
+      "sources": [
+        {
+          "label": "CTBUH · 建筑资料",
+          "url": "https://www.skyscrapercenter.com/building/suzhou-longfor-centre/42345"
+        },
+        {
+          "label": "CTBUH · 建筑位置",
+          "url": "https://www.skyscrapercenter.com/map/building/42345"
+        }
+      ],
+      "coverage": "gap",
+      "originalHeight": 12.8,
+      "originalBasis": "fallback",
+      "renderedHeight": 12.8
+    },
+    {
+      "id": "ctbuh-30255",
+      "name": "恒力中心 1 号楼",
+      "region": "wujiang",
+      "use": "mixed",
+      "status": "completed",
+      "height": 209,
+      "floors": 51,
+      "heightKind": "architectural",
+      "checkedAt": "2026-10-20",
+      "sourceId": "way/1499197731",
+      "gap": "height-conflict",
+      "note": "来源标注 2020 年建成；独立塔楼身份匹配，但冻结 OSM 为楼层推算 121.6 m。插件不覆盖已有楼层证据，保留原值并显式报告冲突。",
+      "sources": [
+        {
+          "label": "CTBUH · 建筑资料",
+          "url": "https://www.skyscrapercenter.com/building/hengli-center-1/30255"
+        },
+        {
+          "label": "CTBUH · 建筑位置",
+          "url": "https://www.skyscrapercenter.com/map/building/30255"
+        }
+      ],
+      "coverage": "gap",
+      "originalHeight": 121.6,
+      "originalBasis": "levels",
+      "renderedHeight": 121.6
+    },
+    {
+      "id": "ctbuh-41136",
+      "name": "中海财富中心",
+      "region": "industrial-park",
+      "use": "office",
+      "status": "unknown",
+      "heightKind": "unknown",
+      "checkedAt": "2026-10-20",
+      "gap": "missing-footprint",
+      "note": "已取得候选位置，冻结数据无可确认的独立轮廓；本轮未完整核实来源高度与建成状态，不采用二手列表中的数值。",
+      "sources": [
+        {
+          "label": "CTBUH · 建筑资料",
+          "url": "https://www.skyscrapercenter.com/building/zhonghai-building/41136"
+        },
+        {
+          "label": "CTBUH · 建筑位置",
+          "url": "https://www.skyscrapercenter.com/map/building/41136"
+        }
+      ],
+      "coverage": "gap"
+    },
+    {
+      "id": "ctbuh-22319",
+      "name": "昆山金鹰广场",
+      "region": "kunshan",
+      "use": "mixed",
+      "status": "completed",
+      "height": 252,
+      "floors": 55,
+      "heightKind": "architectural",
+      "checkedAt": "2026-10-20",
+      "sourceId": "way/567987723",
+      "gap": "unverified-identity",
+      "note": "来源标注 2016 年建成；附近金鹰国际酒店轮廓有楼层推算 160 m，但来源点不在其中，不能按最近距离将其认作 252 m 塔楼。",
+      "sources": [
+        {
+          "label": "CTBUH · 建筑资料",
+          "url": "https://www.skyscrapercenter.com/building/golden-eagle-plaza/22319"
+        },
+        {
+          "label": "CTBUH · 建筑位置",
+          "url": "https://www.skyscrapercenter.com/map/building/22319"
+        }
+      ],
+      "coverage": "gap",
+      "originalHeight": 160,
+      "originalBasis": "levels",
+      "renderedHeight": 160
+    },
+    {
+      "id": "ctbuh-22739",
+      "name": "通力昆山测试塔",
+      "region": "kunshan",
+      "use": "industrial-test",
+      "status": "completed",
+      "height": 235.6,
+      "floors": 36,
+      "heightKind": "architectural",
+      "checkedAt": "2026-10-20",
+      "gap": "missing-footprint",
+      "note": "2015 年建成的电梯测试塔，非普通使用高层建筑；单列结构用途，不与住宅办公存量混计。冻结数据无可核实轮廓。",
+      "sources": [
+        {
+          "label": "CTBUH · 建筑资料",
+          "url": "https://www.skyscrapercenter.com/building/kone-test-tower/22739"
+        },
+        {
+          "label": "CTBUH · 建筑位置",
+          "url": "https://www.skyscrapercenter.com/map/building/22739"
+        },
+        {
+          "label": "KONE · 测试用途",
+          "url": "https://www.kone.com.au/stories-and-references/stories/putting-elevators-to-test.aspx"
+        }
+      ],
+      "coverage": "gap"
+    },
+    {
+      "id": "ctbuh-51041",
+      "name": "常熟金茂智慧科学城高层",
+      "region": "changshu",
+      "use": "office",
+      "status": "completed",
+      "height": 166,
+      "floors": 34,
+      "heightKind": "architectural",
+      "checkedAt": "2026-10-20",
+      "gap": "missing-footprint",
+      "note": "来源标注 2025 年建成、黄浦江路 289 号；仅此高层，不代表整个园区。来源位置无可用冻结轮廓。",
+      "sources": [
+        {
+          "label": "CTBUH · 建筑资料",
+          "url": "https://www.skyscrapercenter.com/building/changshu-jinmao-intelligence-and-science-city/51041"
+        },
+        {
+          "label": "CTBUH · 建筑位置",
+          "url": "https://www.skyscrapercenter.com/map/building/51041"
+        }
+      ],
+      "coverage": "gap"
+    },
+    {
+      "id": "ctbuh-16063",
+      "name": "太仓新港商务区 1 号楼",
+      "region": "taicang",
+      "use": "office",
+      "status": "completed",
+      "height": 155.1,
+      "floors": 36,
+      "heightKind": "architectural",
+      "checkedAt": "2026-10-20",
+      "gap": "missing-footprint",
+      "note": "来源标注 2010 年建成、滨江大道；来源位置无可用冻结轮廓，不把相邻建筑当作替代。",
+      "sources": [
+        {
+          "label": "CTBUH · 建筑资料",
+          "url": "https://www.skyscrapercenter.com/building/taicang-new-port-businese-area-no1-building/16063"
+        },
+        {
+          "label": "CTBUH · 建筑位置",
+          "url": "https://www.skyscrapercenter.com/map/building/16063"
+        }
+      ],
+      "coverage": "gap"
+    },
+    {
+      "id": "taicang-times-financial",
+      "name": "太仓时代金融大厦主楼",
+      "region": "taicang",
+      "use": "office",
+      "status": "completed",
+      "height": 100,
+      "approximate": true,
+      "floors": 23,
+      "heightKind": "project-description",
+      "checkedAt": "2026-10-20",
+      "gap": "unverified-identity",
+      "note": "市财政局证实 2024 年底竣工验收；供应商概述高 100 m，位于阈值且精度不明，不能冒充实测。主塔坐标与轮廓未核实。",
+      "sources": [
+        {
+          "label": "太仓市财政局 · 2024 年底竣工验收",
+          "url": "https://www.taicang.gov.cn/taicang/gqyyjg/202504/cc220a96f2ef4712b4ae598a1540478f.shtml"
+        },
+        {
+          "label": "供应商 · 100 m / 23 层项目概述",
+          "url": "https://www.ipavs.net/caseshow-28-160-1.html"
+        }
+      ],
+      "coverage": "gap"
+    },
+    {
+      "id": "ctbuh-12402",
+      "name": "沙钢大厦 1 号楼",
+      "region": "zhangjiagang",
+      "use": "mixed",
+      "status": "planned",
+      "height": 268,
+      "floors": 76,
+      "heightKind": "architectural",
+      "checkedAt": "2026-10-20",
+      "gap": "not-completed",
+      "note": "CTBUH 实际选定状态为 Vision；页面的所有状态选项不是完工证据。设计高度不用于新增建成模型。",
+      "sources": [
+        {
+          "label": "CTBUH · Vision 状态",
+          "url": "https://awards-api.skyscrapercenter.com/building/shagang-tower-1/12402"
+        }
+      ],
+      "coverage": "gap"
+    },
+    {
+      "id": "ctbuh-12403",
+      "name": "沙钢大厦 2 号楼",
+      "region": "zhangjiagang",
+      "use": "mixed",
+      "status": "planned",
+      "height": 188,
+      "floors": 43,
+      "heightKind": "architectural",
+      "checkedAt": "2026-10-20",
+      "gap": "not-completed",
+      "note": "CTBUH 实际选定状态为 Vision；页面的所有状态选项不是完工证据。设计高度不用于新增建成模型。",
+      "sources": [
+        {
+          "label": "CTBUH · Vision 状态",
+          "url": "https://awards-api.skyscrapercenter.com/building/shagang-tower-2/12403"
+        }
+      ],
+      "coverage": "gap"
+    },
+    {
+      "id": "zhangjiagang-guotai",
+      "name": "张家港国泰中心主塔",
+      "region": "zhangjiagang",
+      "use": "office",
+      "status": "unknown",
+      "height": 158.5,
+      "heightKind": "architectural",
+      "checkedAt": "2026-10-20",
+      "gap": "completion-unverified",
+      "note": "2025-02-19 市级报道仍在幕墙与内装施工；预计交付不是竣工证据，也不能据旧报道宣称 2026 年仍在建。",
+      "sources": [
+        {
+          "label": "张家港市 · 2025-02-19 施工报道",
+          "url": "https://www.zjg.gov.cn/zjg/tpxw/202502/24ea1fc552804e76a156e00ed757a233.shtml"
+        }
+      ],
+      "coverage": "gap"
+    },
+    {
+      "id": "kunshan-butterfly-bay",
+      "name": "昆山世茂蝶湖湾（住宅项目线索）",
+      "region": "kunshan",
+      "use": "residential",
+      "status": "unknown",
+      "height": 150,
+      "heightKind": "project-description",
+      "checkedAt": "2026-10-20",
+      "gap": "unverified-identity",
+      "note": "建筑师称中轴四座塔楼 150 m，但未确认对应楼号、各栋建成状态与独立轮廓。此为一条项目线索，不虚构四栋或给所有 40–50 层住宅赋相同高度。",
+      "sources": [
+        {
+          "label": "王董 · 住宅群项目资料",
+          "url": "https://www.wongtung.com/cn/projects/kunshan-shimao-butterfly-bay-2/"
+        }
+      ],
+      "coverage": "gap"
+    },
+    {
+      "id": "kunshan-gcl",
+      "name": "昆山协鑫数字科技金融中心（审批线索）",
+      "region": "kunshan",
+      "use": "mixed",
+      "status": "planned",
+      "height": 150,
+      "heightKind": "ceiling",
+      "checkedAt": "2026-10-20",
+      "gap": "not-completed",
+      "note": "2026-05-22 审批仅规定最高不超过 150 m；不是实际塔高或建成证据。",
+      "sources": [
+        {
+          "label": "昆山市 · 规划审批高度上限",
+          "url": "https://www.ks.gov.cn/kss/gsgg/202605/477377d254424e309df7e9bd0b6d48c9.shtml"
+        }
+      ],
+      "coverage": "gap"
+    },
+    {
+      "id": "swan-port",
+      "name": "Swan Port Business Center（项目线索）",
+      "region": "industrial-park",
+      "use": "mixed",
+      "status": "on-hold",
+      "heightKind": "unknown",
+      "checkedAt": "2026-10-20",
+      "gap": "not-completed",
+      "note": "公开综合体页的实际状态为 On Hold；不把状态选项中的 Completed 当成已建成，不分配设计高度。",
+      "sources": [
+        {
+          "label": "CTBUH · On Hold",
+          "url": "https://www.skyscrapercenter.com/complex/5453"
+        }
+      ],
+      "coverage": "gap"
+    },
+    {
+      "id": "gusu-china-central-place",
+      "name": "苏州华贸中心（项目线索）",
+      "region": "gusu",
+      "use": "mixed",
+      "status": "unknown",
+      "heightKind": "unknown",
+      "checkedAt": "2026-10-20",
+      "gap": "height-unverified",
+      "note": "设计方与业主项目资料提供候选线索，本轮未核实逐栋高度、完工状态与独立塔楼身份。",
+      "sources": [
+        {
+          "label": "KPF · 苏州华贸中心",
+          "url": "https://www.kpf.com/project/suzhou-china-central-place"
+        },
+        {
+          "label": "华贸 · 苏州公寓项目",
+          "url": "https://www.huamao.cc/en/group/suzhou/apartment"
+        }
+      ],
+      "coverage": "gap"
+    }
+  ],
+  "existingLandmarks": [
+    {
+      "sourceId": "way/461664710",
+      "name": "凤凰文化广场西楼",
+      "height": 145,
+      "heightBasis": "source",
+      "sources": [
+        {
+          "label": "OpenStreetMap · 原始轮廓与高度",
+          "url": "https://www.openstreetmap.org/way/461664710"
+        }
+      ],
+      "note": "沿用已有地标，不冒充本轮独立核实的全市存量；原模型来源与近似说明保持不变。"
+    },
+    {
+      "sourceId": "way/461664711",
+      "name": "凤凰文化广场东楼",
+      "height": 200,
+      "heightBasis": "source",
+      "sources": [
+        {
+          "label": "OpenStreetMap · 原始轮廓与高度",
+          "url": "https://www.openstreetmap.org/way/461664711"
+        }
+      ],
+      "note": "沿用已有地标，不冒充本轮独立核实的全市存量；原模型来源与近似说明保持不变。"
+    },
+    {
+      "sourceId": "way/462717384",
+      "name": "苏州中心5号楼",
+      "height": 132.9,
+      "heightBasis": "source",
+      "sources": [
+        {
+          "label": "OpenStreetMap · 原始轮廓与高度",
+          "url": "https://www.openstreetmap.org/way/462717384"
+        }
+      ],
+      "note": "沿用已有地标，不冒充本轮独立核实的全市存量；原模型来源与近似说明保持不变。"
+    },
+    {
+      "sourceId": "way/462717385",
+      "name": "苏州中心4号楼",
+      "height": 160.3,
+      "heightBasis": "source",
+      "sources": [
+        {
+          "label": "OpenStreetMap · 原始轮廓与高度",
+          "url": "https://www.openstreetmap.org/way/462717385"
+        }
+      ],
+      "note": "沿用已有地标，不冒充本轮独立核实的全市存量；原模型来源与近似说明保持不变。"
+    },
+    {
+      "sourceId": "way/462717390",
+      "name": "苏州中心1号楼",
+      "height": 221.6,
+      "heightBasis": "source",
+      "sources": [
+        {
+          "label": "OpenStreetMap · 原始轮廓与高度",
+          "url": "https://www.openstreetmap.org/way/462717390"
+        }
+      ],
+      "note": "沿用已有地标，不冒充本轮独立核实的全市存量；原模型来源与近似说明保持不变。"
+    },
+    {
+      "sourceId": "way/462717391",
+      "name": "苏州中心2号楼",
+      "height": 194.7,
+      "heightBasis": "source",
+      "sources": [
+        {
+          "label": "OpenStreetMap · 原始轮廓与高度",
+          "url": "https://www.openstreetmap.org/way/462717391"
+        }
+      ],
+      "note": "沿用已有地标，不冒充本轮独立核实的全市存量；原模型来源与近似说明保持不变。"
+    },
+    {
+      "sourceId": "way/462717392",
+      "name": "苏州中心6号楼",
+      "height": 107.8,
+      "heightBasis": "source",
+      "sources": [
+        {
+          "label": "OpenStreetMap · 原始轮廓与高度",
+          "url": "https://www.openstreetmap.org/way/462717392"
+        }
+      ],
+      "note": "沿用已有地标，不冒充本轮独立核实的全市存量；原模型来源与近似说明保持不变。"
+    },
+    {
+      "sourceId": "way/462717395",
+      "name": "环球188 B座",
+      "height": 240,
+      "heightBasis": "source",
+      "sources": [
+        {
+          "label": "OpenStreetMap · 原始轮廓与高度",
+          "url": "https://www.openstreetmap.org/way/462717395"
+        }
+      ],
+      "note": "沿用已有地标，不冒充本轮独立核实的全市存量；原模型来源与近似说明保持不变。"
+    },
+    {
+      "sourceId": "way/462717396",
+      "name": "环球188 A座",
+      "height": 282,
+      "heightBasis": "source",
+      "sources": [
+        {
+          "label": "OpenStreetMap · 原始轮廓与高度",
+          "url": "https://www.openstreetmap.org/way/462717396"
+        }
+      ],
+      "note": "沿用已有地标，不冒充本轮独立核实的全市存量；原模型来源与近似说明保持不变。"
+    },
+    {
+      "sourceId": "way/462717408",
+      "name": "兆润财富中心 B座",
+      "height": 169,
+      "heightBasis": "source",
+      "sources": [
+        {
+          "label": "OpenStreetMap · 原始轮廓与高度",
+          "url": "https://www.openstreetmap.org/way/462717408"
+        }
+      ],
+      "note": "沿用已有地标，不冒充本轮独立核实的全市存量；原模型来源与近似说明保持不变。"
+    },
+    {
+      "sourceId": "way/462717409",
+      "name": "兆润财富中心 A座",
+      "height": 230,
+      "heightBasis": "source",
+      "sources": [
+        {
+          "label": "OpenStreetMap · 原始轮廓与高度",
+          "url": "https://www.openstreetmap.org/way/462717409"
+        }
+      ],
+      "note": "沿用已有地标，不冒充本轮独立核实的全市存量；原模型来源与近似说明保持不变。"
+    },
+    {
+      "sourceId": "way/933819302",
+      "name": "东方之门",
+      "height": 301.8,
+      "heightBasis": "verified",
+      "sources": [
+        {
+          "label": "CTBUH · 301.8 m",
+          "url": "https://www.skyscrapercenter.com/building/gate-to-the-east/499"
+        },
+        {
+          "label": "RMJM · 建筑设计",
+          "url": "https://rmjm.com/portfolio/gate-to-the-east-china/"
+        }
+      ],
+      "note": "沿用已有地标，不冒充本轮独立核实的全市存量；原模型来源与近似说明保持不变。"
+    },
+    {
+      "sourceId": "way/477238586",
+      "name": "苏州国金中心",
+      "height": 452,
+      "heightBasis": "verified",
+      "sources": [
+        {
+          "label": "KPF · 452 m 与鱼尾形态",
+          "url": "https://www.kpf.com/project/suzhou-international-finance-square"
+        }
+      ],
+      "note": "沿用已有地标，不冒充本轮独立核实的全市存量；原模型来源与近似说明保持不变。"
+    },
+    {
+      "sourceId": "way/482784886",
+      "name": "丰隆城市中心 · 东北塔楼",
+      "height": 150,
+      "heightBasis": "verified",
+      "sources": [
+        {
+          "label": "Aedas · 项目实景与布局",
+          "url": "https://www.aedas.com/en/project/hong-leong-city-center/"
+        },
+        {
+          "label": "Aedas 项目申报 · 150 m / 100 m",
+          "url": "https://www.credaward.com/zh/project/178708/"
+        }
+      ],
+      "note": "沿用已有地标，不冒充本轮独立核实的全市存量；原模型来源与近似说明保持不变。"
+    },
+    {
+      "sourceId": "way/482789311",
+      "name": "丰隆城市中心 · 东南塔楼",
+      "height": 150,
+      "heightBasis": "verified",
+      "sources": [
+        {
+          "label": "Aedas · 项目实景与布局",
+          "url": "https://www.aedas.com/en/project/hong-leong-city-center/"
+        },
+        {
+          "label": "Aedas 项目申报 · 150 m / 100 m",
+          "url": "https://www.credaward.com/zh/project/178708/"
+        }
+      ],
+      "note": "沿用已有地标，不冒充本轮独立核实的全市存量；原模型来源与近似说明保持不变。"
+    },
+    {
+      "sourceId": "way/522129366",
+      "name": "丰隆城市中心 · 西南公寓",
+      "height": 100,
+      "heightBasis": "verified",
+      "sources": [
+        {
+          "label": "Aedas · 项目实景与布局",
+          "url": "https://www.aedas.com/en/project/hong-leong-city-center/"
+        },
+        {
+          "label": "Aedas 项目申报 · 150 m / 100 m",
+          "url": "https://www.credaward.com/zh/project/178708/"
+        }
+      ],
+      "note": "沿用已有地标，不冒充本轮独立核实的全市存量；原模型来源与近似说明保持不变。"
+    },
+    {
+      "sourceId": "way/522129367",
+      "name": "丰隆城市中心 · 西北公寓",
+      "height": 100,
+      "heightBasis": "verified",
+      "sources": [
+        {
+          "label": "Aedas · 项目实景与布局",
+          "url": "https://www.aedas.com/en/project/hong-leong-city-center/"
+        },
+        {
+          "label": "Aedas 项目申报 · 150 m / 100 m",
+          "url": "https://www.credaward.com/zh/project/178708/"
+        }
+      ],
+      "note": "沿用已有地标，不冒充本轮独立核实的全市存量；原模型来源与近似说明保持不变。"
+    },
+    {
+      "sourceId": "way/494180282",
+      "name": "现代传媒广场 · 南主塔",
+      "height": 214.8,
+      "heightBasis": "verified",
+      "sources": [
+        {
+          "label": "苏州广电 · 双塔高度",
+          "url": "https://www.csztv.cn/doc/2017/04/28/56127.shtml"
+        },
+        {
+          "label": "日建设计 · 建筑实景与 L 形组合",
+          "url": "https://cn.nikken.jp/projects/mixed_use/suzhou_modern_media_plaza.html"
+        }
+      ],
+      "note": "沿用已有地标，不冒充本轮独立核实的全市存量；原模型来源与近似说明保持不变。"
+    },
+    {
+      "sourceId": "way/494180284",
+      "name": "现代传媒广场 · 北酒店塔",
+      "height": 164.9,
+      "heightBasis": "verified",
+      "sources": [
+        {
+          "label": "苏州广电 · 双塔高度",
+          "url": "https://www.csztv.cn/doc/2017/04/28/56127.shtml"
+        },
+        {
+          "label": "日建设计 · 建筑实景与 L 形组合",
+          "url": "https://cn.nikken.jp/projects/mixed_use/suzhou_modern_media_plaza.html"
+        }
+      ],
+      "note": "沿用已有地标，不冒充本轮独立核实的全市存量；原模型来源与近似说明保持不变。"
+    }
+  ],
+  "sourceOnly": [
+    {
+      "id": "way/1089576220",
+      "name": "万象中心",
+      "kind": "yes",
+      "height": 480,
+      "basis": "height",
+      "estimated": false,
+      "completionVerified": false,
+      "note": "仅冻结 OSM 高度或楼层推算达到阈值；未外部核实身份、建成状态或实际总高，不计为已核实覆盖。"
+    },
+    {
+      "id": "way/1112638361",
+      "name": "",
+      "kind": "apartments",
+      "height": 112,
+      "basis": "levels",
+      "estimated": true,
+      "completionVerified": false,
+      "note": "仅冻结 OSM 高度或楼层推算达到阈值；未外部核实身份、建成状态或实际总高，不计为已核实覆盖。"
+    },
+    {
+      "id": "way/1112638362",
+      "name": "",
+      "kind": "apartments",
+      "height": 128,
+      "basis": "levels",
+      "estimated": true,
+      "completionVerified": false,
+      "note": "仅冻结 OSM 高度或楼层推算达到阈值；未外部核实身份、建成状态或实际总高，不计为已核实覆盖。"
+    },
+    {
+      "id": "way/1499197729",
+      "name": "苏州绿地中心",
+      "kind": "commercial",
+      "height": 358,
+      "basis": "height",
+      "estimated": false,
+      "completionVerified": false,
+      "note": "仅冻结 OSM 高度或楼层推算达到阈值；未外部核实身份、建成状态或实际总高，不计为已核实覆盖。"
+    },
+    {
+      "id": "way/462717389",
+      "name": "",
+      "kind": "yes",
+      "height": 170.4,
+      "basis": "height",
+      "estimated": false,
+      "completionVerified": false,
+      "note": "仅冻结 OSM 高度或楼层推算达到阈值；未外部核实身份、建成状态或实际总高，不计为已核实覆盖。"
+    },
+    {
+      "id": "way/462717393",
+      "name": "苏州中心7号楼",
+      "kind": "yes",
+      "height": 107.8,
+      "basis": "height",
+      "estimated": false,
+      "completionVerified": false,
+      "note": "仅冻结 OSM 高度或楼层推算达到阈值；未外部核实身份、建成状态或实际总高，不计为已核实覆盖。"
+    },
+    {
+      "id": "way/462717429",
+      "name": "交通银行大厦",
+      "kind": "yes",
+      "height": 100,
+      "basis": "height",
+      "estimated": false,
+      "completionVerified": false,
+      "note": "仅冻结 OSM 高度或楼层推算达到阈值；未外部核实身份、建成状态或实际总高，不计为已核实覆盖。"
+    },
+    {
+      "id": "way/507916271",
+      "name": "",
+      "kind": "yes",
+      "height": 151,
+      "basis": "height",
+      "estimated": false,
+      "completionVerified": false,
+      "note": "仅冻结 OSM 高度或楼层推算达到阈值；未外部核实身份、建成状态或实际总高，不计为已核实覆盖。"
+    },
+    {
+      "id": "way/567987725",
+      "name": "",
+      "kind": "apartments",
+      "height": 128,
+      "basis": "levels",
+      "estimated": true,
+      "completionVerified": false,
+      "note": "仅冻结 OSM 高度或楼层推算达到阈值；未外部核实身份、建成状态或实际总高，不计为已核实覆盖。"
+    },
+    {
+      "id": "way/567987727",
+      "name": "",
+      "kind": "apartments",
+      "height": 112,
+      "basis": "levels",
+      "estimated": true,
+      "completionVerified": false,
+      "note": "仅冻结 OSM 高度或楼层推算达到阈值；未外部核实身份、建成状态或实际总高，不计为已核实覆盖。"
+    },
+    {
+      "id": "way/567993033",
+      "name": "",
+      "kind": "commercial",
+      "height": 102.4,
+      "basis": "levels",
+      "estimated": true,
+      "completionVerified": false,
+      "note": "仅冻结 OSM 高度或楼层推算达到阈值；未外部核实身份、建成状态或实际总高，不计为已核实覆盖。"
+    },
+    {
+      "id": "way/567993034",
+      "name": "",
+      "kind": "commercial",
+      "height": 102.4,
+      "basis": "levels",
+      "estimated": true,
+      "completionVerified": false,
+      "note": "仅冻结 OSM 高度或楼层推算达到阈值；未外部核实身份、建成状态或实际总高，不计为已核实覆盖。"
+    },
+    {
+      "id": "way/567993036",
+      "name": "",
+      "kind": "commercial",
+      "height": 102.4,
+      "basis": "levels",
+      "estimated": true,
+      "completionVerified": false,
+      "note": "仅冻结 OSM 高度或楼层推算达到阈值；未外部核实身份、建成状态或实际总高，不计为已核实覆盖。"
+    },
+    {
+      "id": "way/567993058",
+      "name": "",
+      "kind": "apartments",
+      "height": 102.4,
+      "basis": "levels",
+      "estimated": true,
+      "completionVerified": false,
+      "note": "仅冻结 OSM 高度或楼层推算达到阈值；未外部核实身份、建成状态或实际总高，不计为已核实覆盖。"
+    },
+    {
+      "id": "way/568001019",
+      "name": "",
+      "kind": "apartments",
+      "height": 102.4,
+      "basis": "levels",
+      "estimated": true,
+      "completionVerified": false,
+      "note": "仅冻结 OSM 高度或楼层推算达到阈值；未外部核实身份、建成状态或实际总高，不计为已核实覆盖。"
+    },
+    {
+      "id": "way/568001020",
+      "name": "",
+      "kind": "apartments",
+      "height": 102.4,
+      "basis": "levels",
+      "estimated": true,
+      "completionVerified": false,
+      "note": "仅冻结 OSM 高度或楼层推算达到阈值；未外部核实身份、建成状态或实际总高，不计为已核实覆盖。"
+    },
+    {
+      "id": "way/568001022",
+      "name": "",
+      "kind": "apartments",
+      "height": 102.4,
+      "basis": "levels",
+      "estimated": true,
+      "completionVerified": false,
+      "note": "仅冻结 OSM 高度或楼层推算达到阈值；未外部核实身份、建成状态或实际总高，不计为已核实覆盖。"
+    },
+    {
+      "id": "way/568001023",
+      "name": "",
+      "kind": "apartments",
+      "height": 102.4,
+      "basis": "levels",
+      "estimated": true,
+      "completionVerified": false,
+      "note": "仅冻结 OSM 高度或楼层推算达到阈值；未外部核实身份、建成状态或实际总高，不计为已核实覆盖。"
+    },
+    {
+      "id": "way/576936006",
+      "name": "",
+      "kind": "yes",
+      "height": 105.6,
+      "basis": "levels",
+      "estimated": true,
+      "completionVerified": false,
+      "note": "仅冻结 OSM 高度或楼层推算达到阈值；未外部核实身份、建成状态或实际总高，不计为已核实覆盖。"
+    },
+    {
+      "id": "way/576936007",
+      "name": "",
+      "kind": "apartments",
+      "height": 105.6,
+      "basis": "levels",
+      "estimated": true,
+      "completionVerified": false,
+      "note": "仅冻结 OSM 高度或楼层推算达到阈值；未外部核实身份、建成状态或实际总高，不计为已核实覆盖。"
+    },
+    {
+      "id": "way/576936008",
+      "name": "",
+      "kind": "apartments",
+      "height": 105.6,
+      "basis": "levels",
+      "estimated": true,
+      "completionVerified": false,
+      "note": "仅冻结 OSM 高度或楼层推算达到阈值；未外部核实身份、建成状态或实际总高，不计为已核实覆盖。"
+    },
+    {
+      "id": "way/576936009",
+      "name": "",
+      "kind": "apartments",
+      "height": 105.6,
+      "basis": "levels",
+      "estimated": true,
+      "completionVerified": false,
+      "note": "仅冻结 OSM 高度或楼层推算达到阈值；未外部核实身份、建成状态或实际总高，不计为已核实覆盖。"
+    },
+    {
+      "id": "way/576936010",
+      "name": "",
+      "kind": "apartments",
+      "height": 105.6,
+      "basis": "levels",
+      "estimated": true,
+      "completionVerified": false,
+      "note": "仅冻结 OSM 高度或楼层推算达到阈值；未外部核实身份、建成状态或实际总高，不计为已核实覆盖。"
+    },
+    {
+      "id": "way/576936011",
+      "name": "",
+      "kind": "apartments",
+      "height": 105.6,
+      "basis": "levels",
+      "estimated": true,
+      "completionVerified": false,
+      "note": "仅冻结 OSM 高度或楼层推算达到阈值；未外部核实身份、建成状态或实际总高，不计为已核实覆盖。"
+    },
+    {
+      "id": "way/576936012",
+      "name": "",
+      "kind": "apartments",
+      "height": 105.6,
+      "basis": "levels",
+      "estimated": true,
+      "completionVerified": false,
+      "note": "仅冻结 OSM 高度或楼层推算达到阈值；未外部核实身份、建成状态或实际总高，不计为已核实覆盖。"
+    },
+    {
+      "id": "way/871198615",
+      "name": "140",
+      "kind": "apartments",
+      "height": 102.4,
+      "basis": "levels",
+      "estimated": true,
+      "completionVerified": false,
+      "note": "仅冻结 OSM 高度或楼层推算达到阈值；未外部核实身份、建成状态或实际总高，不计为已核实覆盖。"
+    },
+    {
+      "id": "way/871198618",
+      "name": "145",
+      "kind": "apartments",
+      "height": 102.4,
+      "basis": "levels",
+      "estimated": true,
+      "completionVerified": false,
+      "note": "仅冻结 OSM 高度或楼层推算达到阈值；未外部核实身份、建成状态或实际总高，不计为已核实覆盖。"
+    },
+    {
+      "id": "way/871198620",
+      "name": "139",
+      "kind": "apartments",
+      "height": 102.4,
+      "basis": "levels",
+      "estimated": true,
+      "completionVerified": false,
+      "note": "仅冻结 OSM 高度或楼层推算达到阈值；未外部核实身份、建成状态或实际总高，不计为已核实覆盖。"
+    },
+    {
+      "id": "way/871198621",
+      "name": "146",
+      "kind": "apartments",
+      "height": 102.4,
+      "basis": "levels",
+      "estimated": true,
+      "completionVerified": false,
+      "note": "仅冻结 OSM 高度或楼层推算达到阈值；未外部核实身份、建成状态或实际总高，不计为已核实覆盖。"
+    },
+    {
+      "id": "way/875374299",
+      "name": "144",
+      "kind": "apartments",
+      "height": 102.4,
+      "basis": "levels",
+      "estimated": true,
+      "completionVerified": false,
+      "note": "仅冻结 OSM 高度或楼层推算达到阈值；未外部核实身份、建成状态或实际总高，不计为已核实覆盖。"
+    },
+    {
+      "id": "way/878542679",
+      "name": "141",
+      "kind": "apartments",
+      "height": 102.4,
+      "basis": "levels",
+      "estimated": true,
+      "completionVerified": false,
+      "note": "仅冻结 OSM 高度或楼层推算达到阈值；未外部核实身份、建成状态或实际总高，不计为已核实覆盖。"
+    }
+  ],
+  "source": {
+    "dataset": "c8a953228b2ff6af",
+    "buildings": 56459,
+    "tiles": 616,
+    "sha256": "623c79dc8c939b7bd0660aba604dafdd7a95660d8c777347bcf4312778118eb1"
+  }
+}

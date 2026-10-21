@@ -8,6 +8,7 @@ export interface BuildingHeightRecord {
   bounds: Bounds;
   name: string;
   height: number;
+  approximate?: boolean;
   floors?: number;
   checkedAt: string;
   identity: string;
@@ -18,6 +19,7 @@ export interface HeightReference {
   provider: string;
   name: string;
   height: number;
+  approximate?: boolean;
   floors?: number;
   checkedAt: string;
   sources: { label: string; url: string }[];
@@ -29,8 +31,9 @@ export interface BuildingHeightProvider {
 }
 
 function metadata(provider: string, record: BuildingHeightRecord): HeightReference {
-  const { name, height, floors, checkedAt, sources } = record;
-  return { provider, name, height, ...(floors === undefined ? {} : { floors }), checkedAt,
+  const { name, height, approximate, floors, checkedAt, sources } = record;
+  return { provider, name, height, ...(approximate === undefined ? {} : { approximate }),
+    ...(floors === undefined ? {} : { floors }), checkedAt,
     sources: sources.map(source => ({ ...source })) };
 }
 
@@ -41,6 +44,7 @@ export function createHeightProvider(id: string, records: readonly BuildingHeigh
     if (indexed.has(record.sourceId)) throw new Error(`Duplicate building height record: ${record.sourceId}`);
     if (!/^way\/\d+$|^relation\/\d+$/.test(record.sourceId) || !record.name.trim()
       || !Number.isFinite(record.height) || record.height <= 0 || record.height > 1000
+      || record.approximate !== undefined && typeof record.approximate !== 'boolean'
       || record.floors !== undefined && (!Number.isSafeInteger(record.floors) || record.floors <= 0 || record.floors > 200)
       || !/^\d{4}-\d{2}-\d{2}$/.test(record.checkedAt) || !Number.isFinite(Date.parse(record.checkedAt))
       || !record.identity.trim() || record.bounds.length !== 4 || !record.bounds.every(Number.isFinite)

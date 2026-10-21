@@ -92,19 +92,42 @@ async function unpack(bytes: Uint8Array) {
 
 describe('persistent architecture batches', () => {
   it.each(['far', 'mid', 'near'] as const)('applies generic reference heights with unchanged source fields in %s', async lod => {
-    const sourcesById = ['4828_1253', '4823_1252'].flatMap(tile =>
+    const sourcesById = ['4828_1253', '4828_1252', '4823_1252', '4822_1251'].flatMap(tile =>
       (JSON.parse(readFileSync(`public/data/c8a953228b2ff6af/tiles/${tile}.json`, 'utf8')) as { features: BuildingFeature[] }).features);
-    const features = ['way/802754584', 'way/822365267', 'way/822365266']
-      .map(id => sourcesById.find(feature => feature.properties.id === id)!);
+    const towers = [
+      { id: 'way/802754584', height: 303.2, floors: 68 },
+      { id: 'way/822365267', height: 175, floors: 48 },
+      { id: 'way/475616606', height: 232, floors: 54 },
+      { id: 'way/475616607', height: 125, floors: 28 },
+      { id: 'way/475616603', height: 210, floors: 52 },
+      { id: 'way/475616604', height: 210, floors: 52 },
+      { id: 'way/482784883', height: 100, approximate: true },
+      { id: 'way/482784884', height: 100, approximate: true },
+      { id: 'way/482784885', height: 160 },
+    ];
+    const expected = [...towers, ...['way/822365266', 'way/475616608', 'way/475616605', 'way/475616602',
+      'way/482784880', 'way/533115311', 'way/533115312', 'way/533115314', 'way/533115316']
+      .map(id => ({ id, height: 12.8, floors: undefined }))];
+    const features = expected.map(({ id }) => sourcesById.find(feature => feature.properties.id === id)!);
     const before = structuredClone(features);
     const { document, sources, primitives } = await unpack((await buildBatch(features, lod)).bytes);
-    for (const [index, height] of [303.2, 175, 12.8].entries()) {
+    for (const [index, { height, floors }] of expected.entries()) {
       const { heightReference, ...original } = sources[index];
       expect(original).toEqual(before[index].properties);
-      if (index < 2) expect(JSON.parse(String(heightReference))).toMatchObject({
-        provider: 'verified-building-heights-v1', height, floors: index === 0 ? 68 : 48,
-      });
-      else expect(heightReference).toBe('');
+      if (index < towers.length) {
+        expect(heightReference).not.toBe('');
+        const reference = JSON.parse(String(heightReference));
+        expect(reference).toMatchObject({ provider: 'verified-building-heights-v1', height });
+        if (floors === undefined) expect(reference).not.toHaveProperty('floors');
+        else expect(reference.floors).toBe(floors);
+        if (towers[index].approximate) expect(reference.approximate).toBe(true);
+        else expect(reference).not.toHaveProperty('approximate');
+        const occupied = primitives.filter((_, primitive) =>
+          document.materials[document.meshes[0].primitives[primitive].material].emissiveFactor?.some(value => value > 0));
+        expect(occupied.some(p => p.indices.some(vertex => p.features[vertex] === index))).toBe(true);
+        const dark = primitives.filter(p => p.material.split(' / ').includes('Window - dark'));
+        expect(dark.some(p => p.indices.some(vertex => p.features[vertex] === index))).toBe(true);
+      } else expect(heightReference).toBe('');
       const top = Math.max(...primitives.flatMap(p =>
         p.positions.filter((_, vertex) => p.features[vertex] === index).map(point => point[1])));
       expect(Math.abs(top - (height + 0.46))).toBeLessThanOrEqual(document.nodes[0].scale[1] / 2 + 1e-6);
