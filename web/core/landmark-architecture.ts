@@ -25,7 +25,8 @@ function materials(id: string, skyline: boolean): ArchitectureMaterial[] {
     create('Frame', pale ? [0.84, 0.86, 0.84] : modern || mall ? [0.48, 0.53, 0.55] : [0.34, 0.12, 0.07], modern ? 0.5 : 0),
     create('Stone', brick ? [0.43, 0.35, 0.27] : [0.63, 0.62, 0.55]),
     create('Metal', [0.42, 0.46, 0.47], 0.55, 0.4),
-    create('Window - warm', [0.22, 0.37, 0.41], 0.25, 0.28, wheel ? [0.35, 0.65, 0.95] : [0.85, 0.55, 0.22]),
+    create('Window - warm', wheel ? [0.98, 0.77, 0.48] : [0.22, 0.37, 0.41],
+      wheel ? 0.05 : 0.25, wheel ? 0.2 : 0.28, wheel ? [1, 0.78, 0.42] : [0.85, 0.55, 0.22]),
     create('Window - dark', modern || mall ? [0.15, 0.28, 0.33] : [0.075, 0.065, 0.05], modern ? 0.3 : 0, 0.35),
     create('Roof detail', mall ? [0.27, 0.39, 0.22] : [0.23, 0.27, 0.28]),
   ];

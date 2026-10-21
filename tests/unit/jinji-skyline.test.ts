@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { ArchitecturalMesh } from '../../web/core/architectural-mesh';
 import { buildArchitecture, emitArchitecture } from '../../web/core/building-architecture';
 import { landmarkFor, landmarks } from '../../web/core/landmarks';
+import { buildBatch } from '../../pipeline/architecture/mesh';
 import { partitionArchitecture, createTileset } from '../../pipeline/architecture/tiles';
 import { parseCityArchitectureManifest } from '../../web/core/architecture-manifest';
 import type { BuildingFeature } from '../../web/core/types';
@@ -115,6 +116,24 @@ describe('Jinji Lake source-grounded skyline', () => {
       const area = Math.hypot(a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]) / 2;
       expect(area).toBeLessThan(200);
     }
+  });
+
+  it('gives the wheel bright warm night lighting', async () => {
+    const { bytes } = await buildBatch([wheel()], 'near'), view = new DataView(
+      bytes.buffer, bytes.byteOffset, bytes.byteLength,
+    );
+    const document = JSON.parse(new TextDecoder().decode(
+      bytes.subarray(20, 20 + view.getUint32(12, true)),
+    )) as {
+      materials: { name: string; emissiveFactor?: number[] }[];
+      meshes: { primitives: { material: number }[] }[];
+      nodes: { mesh: number }[];
+    };
+    const warm = document.materials.find(material => material.name === 'Window - warm')!;
+    expect(warm.emissiveFactor?.[0]).toBeGreaterThanOrEqual(1);
+    expect(warm.emissiveFactor?.[0]).toBeGreaterThan(warm.emissiveFactor?.[2] ?? 0);
+    expect(document.meshes[document.nodes[0].mesh!].primitives.some(primitive =>
+      document.materials[primitive.material] === warm)).toBe(true);
   });
 
   it('accounts separately for a supplemental attraction without pretending it came from the building snapshot', () => {
