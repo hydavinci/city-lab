@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-21-citywide-mobility-design.md`
 
-**Execution status (2026-10-21):** Tasks 1–4 implemented on `feat/citywide-mobility`.
+**Execution status (2026-10-21):** Tasks 1–5 implemented on `feat/citywide-mobility`.
 The actual municipality intersects 2,232 acquisition cells. Public-service probes timed out or
 returned HTTP 406; no full-city sources or mobility release have been published. The user approved
 continuing compiler, simulation and UI implementation while leaving publication/data acceptance incomplete.
@@ -69,7 +69,7 @@ interface MobilityCoverage {
 }
 interface MobilityManifest {
   version: 1; id: string; baseDataset: string; generatedAt: string; bounds: Bounds;
-  assets: MobilityResource; cells: MobilityCell[]; coverage: MobilityCoverage;
+  assets: MobilityResource; cells: MobilityCell[]; coverage: MobilityCoverage; report?: MobilityResource;
 }
 interface MobilitySurface {
   id: string; sourceIds: string[]; mode: 'drive' | 'walk';
@@ -295,7 +295,7 @@ verified enhancement assets and existing building/water/static-placement obstacl
 onProgress?: (completed: number, total: number) => void }): Promise<MobilityManifest>`,
 `public/mobility/manifest.json` and immutable hash-addressed payloads/coverage report.
 
-- [ ] Add filesystem tests in a task-local temporary directory:
+- [x] Add filesystem tests in a task-local temporary directory:
 
 ```ts
 it('keeps the old manifest when one required source cell is missing', async () => {
@@ -307,17 +307,24 @@ it('keeps the old manifest when one required source cell is missing', async () =
 
   Define `options`, `outputManifest`, complete synthetic cache and incomplete-cell variant in the test
   setup; use `publicationFixture()` for base and assets. Do not hide failures with successful empty files.
-- [ ] Run red; implement per-cell resumable records bound to source, generator, obstacles, assets and
+- [x] Run red; implement per-cell resumable records bound to source, generator, obstacles, assets and
   base-manifest hashes. Read only needed base building tiles; spatially index water/placements.
   Rebuild invalidated cells, not unrelated building architecture.
-- [ ] Compute coverage from actual outputs: every planned cell classified, source/usable road lengths,
+- [x] Compute coverage from actual outputs: every planned cell classified, source/usable road lengths,
   exclusion counts/codes, asset references and timestamps. Validate all chunk bytes/hash, ownership,
   links and accounting before an atomic manifest replacement. `coverage.failed` must be zero to publish.
-- [ ] Test corruption recovery, source changes, stale base dataset, empty/excluded cells, incremental reuse,
+- [x] Test corruption recovery, source changes, stale base dataset, empty/excluded cells, incremental reuse,
   deterministic content IDs and interrupted writes. Reject publishing while required cells are failed.
-- [ ] Add `data:mobility:build` for `tsx pipeline/mobility/build.ts`; document commands and resource layout.
-- [ ] Run acquisition/compiler/publication tests and type-check; commit
+- [x] Add `data:mobility:build` for `tsx pipeline/mobility/build.ts`; document commands and resource layout.
+- [x] Run acquisition/compiler/publication tests and type-check; commit
   `feat: publish audited offline citywide mobility resources`.
+
+Implementation note: publication is verified using synthetic temporary packages, not actual citywide
+data. The report separates owned directed usable paths (including turns) from source centrelines
+clipped to acquisition core rectangles (including municipality-border context, excluding halos).
+Shared source intervals are unioned so cell boundaries do not inflate source lengths.
+Asset-manifest snapshots preserve original bytes outside existing immutable asset directories.
+Real acquisition/publication and geographic acceptance remain blocked as described above.
 
 ### Task 6: Deterministic Actor Motion, Spawning and Following
 

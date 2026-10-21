@@ -3,6 +3,7 @@ __pycache__/
 dist/
 public/architecture-city/
 public/mobility/
+public/enhancements/mobility-assets-*.json
 data/raw/
 data/enhancements/staging/
 artifacts/

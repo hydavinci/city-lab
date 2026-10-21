@@ -17,7 +17,7 @@ export interface MobilityCoverage {
 }
 export interface MobilityManifest {
   version: 1; id: string; baseDataset: string; generatedAt: string; bounds: Bounds;
-  assets: MobilityResource; cells: MobilityCell[]; coverage: MobilityCoverage;
+  assets: MobilityResource; cells: MobilityCell[]; coverage: MobilityCoverage; report?: MobilityResource;
 }
 export interface MobilitySurface {
   id: string; sourceIds: string[]; mode: 'drive' | 'walk';
@@ -114,6 +114,7 @@ export function parseMobilityManifest(value: unknown, baseDataset: string): Mobi
   check(typeof m.baseDataset === 'string' && m.baseDataset === baseDataset, 'base dataset mismatch');
   check(typeof m.generatedAt === 'string' && Number.isFinite(Date.parse(m.generatedAt)), 'invalid generated time');
   bounds(m.bounds); resource(m.assets, 'enhancements/');
+  if (m.report !== undefined) resource(m.report, `mobility/${m.id}/`);
   list(m.cells, true);
   const cells = unique(m.cells);
   let ready = 0, empty = 0, excluded = 0, driveMetres = 0, walkMetres = 0;

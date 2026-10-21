@@ -103,7 +103,7 @@ function numeric(value: string|undefined, fallback: number, type: 'width'|'lanes
     || (type==='lanes' && Number(m[1])>12) || (type==='speed' && m[2]==='m')) fail(`Invalid ${type}: ${value}`);
   return Number(m[1])*(type==='speed' ? (m[2]==='mph'?0.44704:1/3.6):1);
 }
-function clip(a: XY,b: XY,bounds: Bounds): [XY,XY,number,number]|undefined {
+export function clipSegment(a: XY,b: XY,bounds: Bounds): [XY,XY,number,number]|undefined {
   let lo=0, hi=1;
   for(let axis=0;axis<2;axis++) {
     const d=b[axis]-a[axis];
@@ -206,7 +206,7 @@ export function compileNetwork(source: unknown, selection: unknown, buildings: P
             ? (directions.length===1?(lane+0.5)*width/lanes-width/2:width/lanes/2):0;
           for(let i=1;i<ordered.length;i++) {
             const na=nodes.get(ordered[i-1])!,nb=nodes.get(ordered[i])!;
-            const clipped=clip([na.lon,na.lat],[nb.lon,nb.lat],s.bounds); if(!clipped) continue;
+            const clipped=clipSegment([na.lon,na.lat],[nb.lon,nb.lat],s.bounds); if(!clipped) continue;
             const [ga,gb,lo,hi]=clipped,a=project(ga,origin),b=project(gb,origin),len=distance(a,b);
             if(len<0.1) { note([w.id],'SHORT_SEGMENT','Excluded segment shorter than 0.1m'); continue; }
             const u: XY=[(b[0]-a[0])/len,(b[1]-a[1])/len];

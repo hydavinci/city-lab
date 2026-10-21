@@ -1,15 +1,15 @@
-import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 import { pathToFileURL } from 'node:url';
 import type { FeatureCollection } from 'geojson';
-import type { Bounds } from '../../web/core/types';
+import type { Bounds, CityManifest } from '../../web/core/types';
 import type { Polygon2, XY } from '../../web/core/enhancements';
 import { geometryBounds, validateRing } from '../../web/core/geo';
 import { polygonsIntersect, project } from '../enhancements/geometry';
 import { validateSource } from '../enhancements/fetch';
 import { validateOverpass, type OverpassResponse } from '../normalize';
+import { atomicJSON as atomic, packageFile, sha256 as hash } from './files';
 
 interface PlannedCell { id: string; bounds: Bounds }
 export interface MobilitySourceCache {
@@ -27,7 +27,6 @@ export interface MobilityAcquisition {
     resource?: { path: string; bytes: number; sha256: string }; error?: string;
   })[];
 }
-const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 function check(ok: unknown, message: string): asserts ok { if (!ok) throw new Error(message); }
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);
@@ -38,13 +37,6 @@ function canonical(value: unknown): unknown {
   return value;
 }
 const sourceHash = (source: unknown) => hash(JSON.stringify(canonical(source)));
-async function atomic(path: string, value: unknown): Promise<void> {
-  const temporary = `${path}.${randomUUID()}.tmp`;
-  try {
-    await writeFile(temporary, JSON.stringify(value), { flag: 'wx' });
-    await rename(temporary, path);
-  } finally { await rm(temporary, { force: true }); }
-}
 
 export function planCells(boundary: FeatureCollection, span = 0.02): PlannedCell[] {
   check(Number.isFinite(span) && span >= 0.001 && span <= 0.1, 'Invalid acquisition span');
@@ -93,56 +85,103 @@ function queryFor(halo: Bounds, snapshot: string): string {
     (.roads;.restrictions;);(._;>>;);out body;`;
 }
 
-export async function fetchMobility({ baseDir, cacheDir, refresh }: {
-  baseDir: string; cacheDir: string; refresh: boolean;
-}): Promise<void> {
-  const baseText = await readFile(join(baseDir, 'manifest.json'), 'utf8');
-  const base = JSON.parse(baseText) as { version: number; dataset: string; osmTimestamp: string };
+function haloFor(bounds: Bounds): Bounds {
+  return [Math.max(-180, bounds[0] - 0.002), Math.max(-90, bounds[1] - 0.002),
+    Math.min(180, bounds[2] + 0.002), Math.min(90, bounds[3] + 0.002)];
+}
+async function baseInputs(baseDir: string) {
+  const baseText = (await packageFile(baseDir, 'manifest.json')).toString();
+  const base = JSON.parse(baseText) as CityManifest;
   check(base.version === 1 && typeof base.dataset === 'string' && /^[a-f0-9]{16,64}$/.test(base.dataset),
     'Invalid base dataset');
   check(typeof base.osmTimestamp === 'string' && Number.isFinite(Date.parse(base.osmTimestamp)), 'Invalid base snapshot');
   const snapshot = new Date(base.osmTimestamp).toISOString().replace(/\.\d{3}Z$/, 'Z');
-  const boundaryText = await readFile(join(baseDir, base.dataset, 'boundary.json'), 'utf8');
+  const boundaryText = (await packageFile(baseDir, `${base.dataset}/boundary.json`)).toString();
   const planned = planCells(JSON.parse(boundaryText) as FeatureCollection);
+  return { base, baseText, boundaryText, planned, snapshot };
+}
+function identityFor(baseText: string, boundaryText: string, endpoint: string, snapshot: string): string {
+  return hash(JSON.stringify({ version: 1, baseHash: hash(baseText), boundaryHash: hash(boundaryText), endpoint, snapshot }));
+}
+function parseCache(value: unknown, expected: Pick<MobilitySourceCache['metadata'], 'identity' | 'baseDataset' | 'query' | 'bounds' | 'halo'>): MobilitySourceCache {
+  check(value && typeof value === 'object', 'Missing source cache');
+  const candidate = value as MobilitySourceCache;
+  validateSource(candidate.response, { allowEmpty: true });
+  const metadata = candidate.metadata;
+  check(metadata?.version === 1 && metadata.identity === expected.identity && metadata.baseDataset === expected.baseDataset
+    && metadata.query === expected.query && JSON.stringify(metadata.bounds) === JSON.stringify(expected.bounds)
+    && JSON.stringify(metadata.halo) === JSON.stringify(expected.halo)
+    && typeof metadata.fetchedAt === 'string' && Number.isFinite(Date.parse(metadata.fetchedAt))
+    && metadata.osmSnapshot === candidate.response.osm3s?.timestamp_osm_base
+    && metadata.sourceHash === sourceHash(candidate.response), 'Cache metadata/hash mismatch');
+  return candidate;
+}
+function consistent(source: OverpassResponse, seen: ReadonlyMap<string, string>): void {
+  for (const element of source.elements) {
+    const id = `${element.type}/${element.id}`, previous = seen.get(id);
+    check(previous === undefined || previous === sourceHash(element), `Conflicting source geometry/tags/membership: ${id}`);
+  }
+}
+
+export async function readMobilitySources({ baseDir, cacheDir }: { baseDir: string; cacheDir: string }) {
+  const inputs = await baseInputs(baseDir), { base, baseText, boundaryText, planned, snapshot } = inputs;
+  const inventory = await packageFile(cacheDir, 'progress.json');
+  const report = JSON.parse(inventory.toString()) as MobilityAcquisition;
+  check(report?.version === 1 && report.baseDataset === base.dataset && report.boundaryHash === hash(boundaryText)
+    && typeof report.endpoint === 'string' && report.requestedSnapshot === snapshot
+    && report.identity === identityFor(baseText, boundaryText, report.endpoint, snapshot)
+    && Array.isArray(report.cells) && report.cells.length === planned.length, 'Incomplete or stale acquisition inventory');
+  async function* entries() {
+    const seen = new Map<string, string>();
+    for (const [i, cell] of report.cells.entries()) {
+      const expected = planned[i], halo = haloFor(expected.bounds), path = `cell-${expected.id.slice('cell/'.length)}.json`;
+      check(cell.id === expected.id && JSON.stringify(cell.bounds) === JSON.stringify(expected.bounds)
+        && JSON.stringify(cell.halo) === JSON.stringify(halo) && cell.status === 'complete',
+      `Incomplete source cell ${expected.id}: ${cell.error ?? cell.status}`);
+      const resource = cell.resource;
+      check(resource?.path === path && Number.isSafeInteger(resource.bytes) && resource.bytes > 0
+        && typeof resource.sha256 === 'string' && /^[a-f0-9]{64}$/.test(resource.sha256), 'Invalid acquisition resource');
+      const bytes = await packageFile(cacheDir, path);
+      check(bytes.length === resource.bytes && hash(bytes) === resource.sha256, `Acquisition source bytes/hash mismatch: ${cell.id}`);
+      const cache = parseCache(JSON.parse(bytes.toString()), {
+        identity: report.identity, baseDataset: base.dataset, query: queryFor(halo, snapshot), bounds: expected.bounds, halo,
+      });
+      consistent(cache.response, seen);
+      for (const element of cache.response.elements) seen.set(`${element.type}/${element.id}`, sourceHash(element));
+      yield { cell: { ...expected, halo }, cache };
+    }
+  }
+  return { ...inputs, report, entries, inventoryHash: hash(inventory) };
+}
+
+export async function fetchMobility({ baseDir, cacheDir, refresh }: {
+  baseDir: string; cacheDir: string; refresh: boolean;
+}): Promise<void> {
+  const { base, baseText, boundaryText, planned, snapshot } = await baseInputs(baseDir);
   const endpoint = process.env.OVERPASS_ENDPOINT ?? 'https://overpass.private.coffee/api/interpreter';
   check(['http:', 'https:'].includes(new URL(endpoint).protocol), 'Invalid Overpass endpoint');
-  const boundaryHash = hash(boundaryText), identity = hash(JSON.stringify({
-    version: 1, baseHash: hash(baseText), boundaryHash, endpoint, snapshot,
-  }));
+  const boundaryHash = hash(boundaryText), identity = identityFor(baseText, boundaryText, endpoint, snapshot);
   const progress: MobilityAcquisition = {
     version: 1, identity, baseDataset: base.dataset, boundaryHash, requestedSnapshot: snapshot, endpoint,
     cells: planned.map(cell => ({
       ...cell, status: 'pending',
-      halo: [Math.max(-180, cell.bounds[0] - 0.002), Math.max(-90, cell.bounds[1] - 0.002),
-        Math.min(180, cell.bounds[2] + 0.002), Math.min(90, cell.bounds[3] + 0.002)],
+      halo: haloFor(cell.bounds),
     })),
   };
   await mkdir(cacheDir, { recursive: true });
   const progressPath = join(cacheDir, 'progress.json');
   await atomic(progressPath, progress);
   const seen = new Map<string, string>();
-  const verifyConsistency = (source: OverpassResponse) => {
-    for (const element of source.elements) {
-      const id = `${element.type}/${element.id}`, previous = seen.get(id);
-      check(previous === undefined || previous === sourceHash(element), `Conflicting source geometry/tags/membership: ${id}`);
-    }
-  };
   for (const [index, cell] of progress.cells.entries()) {
     const path = `cell-${cell.id.slice('cell/'.length)}.json`, fullPath = join(cacheDir, path);
     const query = queryFor(cell.halo, snapshot);
     let cache: MobilitySourceCache | undefined;
     if (!refresh) {
       try {
-        const candidate = JSON.parse(await readFile(fullPath, 'utf8')) as MobilitySourceCache;
-        validateSource(candidate.response, { allowEmpty: true });
-        const metadata = candidate.metadata;
-        check(metadata.version === 1 && metadata.identity === identity && metadata.baseDataset === base.dataset
-          && metadata.query === query && JSON.stringify(metadata.bounds) === JSON.stringify(cell.bounds)
-          && JSON.stringify(metadata.halo) === JSON.stringify(cell.halo)
-          && Number.isFinite(Date.parse(metadata.fetchedAt))
-          && metadata.osmSnapshot === candidate.response.osm3s?.timestamp_osm_base
-          && metadata.sourceHash === sourceHash(candidate.response), 'Cache metadata/hash mismatch');
-        verifyConsistency(candidate.response); cache = candidate;
+        const candidate = parseCache(JSON.parse((await packageFile(cacheDir, path)).toString()), {
+          identity, baseDataset: base.dataset, query, bounds: cell.bounds, halo: cell.halo,
+        });
+        consistent(candidate.response, seen); cache = candidate;
       } catch (error) {
         if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) {
           console.warn(`Invalid mobility cache ${cell.id}; downloading replacement:`, error);
@@ -162,7 +201,7 @@ export async function fetchMobility({ baseDir, cacheDir, refresh }: {
           const source: unknown = JSON.parse(await response.text());
           validateSource(source, { allowEmpty: true });
           const data = validateOverpass(source);
-          verifyConsistency(data);
+          consistent(data, seen);
           cache = { metadata: {
             version: 1, identity, baseDataset: base.dataset, query, bounds: cell.bounds, halo: cell.halo,
             fetchedAt: new Date().toISOString(), osmSnapshot: data.osm3s!.timestamp_osm_base!,

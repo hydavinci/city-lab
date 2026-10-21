@@ -10,6 +10,9 @@ type Way = Selection['driveWays'][number];
 const drive = new Set(['primary', 'secondary', 'tertiary', 'residential', 'unclassified', 'service',
   'living_street', 'primary_link', 'secondary_link', 'tertiary_link']);
 const walk = new Set(['footway', 'path', 'pedestrian']);
+export function mobilityMode(highway: string): 'drive' | 'walk' | undefined {
+  return drive.has(highway) ? 'drive' : walk.has(highway) ? 'walk' : undefined;
+}
 function check(ok: unknown, message: string): asserts ok { if (!ok) throw new Error(message); }
 const contains = (bounds: Bounds, point: XY) =>
   point[0] >= bounds[0] && point[0] <= bounds[2] && point[1] >= bounds[1] && point[1] <= bounds[3];
@@ -100,8 +103,8 @@ export function compileCell(input: {
     if (new Set(segments).size !== segments.length) {
       (excludedWays['repeated-segment'] ??= []).push(way.id);
       diagnostics.push({ sourceIds: [way.id], code: 'EXCLUDED_REPEATED_SEGMENT', message: 'Repeated undirected source segment' });
-    } else if (drive.has(way.tags.highway)) driveWays.push(way);
-    else if (walk.has(way.tags.highway)) walkWays.push(way);
+    } else if (mobilityMode(way.tags.highway) === 'drive') driveWays.push(way);
+    else if (mobilityMode(way.tags.highway) === 'walk') walkWays.push(way);
     else {
       (excludedWays['unsupported-highway'] ??= []).push(way.id);
       diagnostics.push({ sourceIds: [way.id], code: 'UNSUPPORTED_HIGHWAY',
