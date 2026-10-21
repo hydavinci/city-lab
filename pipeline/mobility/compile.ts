@@ -135,11 +135,16 @@ export function compileCell(input: {
   }
   const network = compiled.network, sourceSegments = new Map<string, { way: string; nodes: [number, number] }>();
   for (const edge of network.edges) {
-    const match = /^(drive|walk)\/(way\/\d+)\/(\d+)-(\d+)$/.exec(edge.id);
+    const match = /^(drive|walk)\/(way\/\d+)\/(\d+)-(\d+)(?:\/clip\/.+)?$/.exec(edge.id);
     if (match) sourceSegments.set(edge.id, { way: match[2], nodes: [Number(match[3]), Number(match[4])] });
   }
   const ownedEdges = network.edges.filter(edge => {
     const segment = sourceSegments.get(edge.id), junction = edge.sourceIds.find(id => /^node\/\d+$/.test(id));
+    if (segment && edge.id.includes('/clip/')) {
+      compiled.diagnostics.push({ sourceIds: edge.sourceIds, code: 'CLIPPED_HALO_LOOKAHEAD',
+        message: `${edge.id}: clipped halo fragment is validation/lookahead data, not a second owned source segment` });
+      return false;
+    }
     let anchor: XY;
     if (segment) {
       const [a, b] = segment.nodes.map(id => nodes.get(id)!.coordinate);

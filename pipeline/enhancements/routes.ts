@@ -141,6 +141,7 @@ interface SegmentInfo { edge: Edge; start: string; end: string; direction: XY; w
 export function compileNetwork(source: unknown, selection: unknown, buildings: Polygon2[], water: Polygon2[],
   options: { routePolicy?: 'ports' } = {}): {network:Network;diagnostics:Diagnostic[]} {
   const s=parseSelection(selection,source), diagnostics: Diagnostic[]=[...s.diagnostics];
+  const ports=options.routePolicy==='ports';
   const origin: XY=[(s.bounds[0]+s.bounds[2])/2,(s.bounds[1]+s.bounds[3])/2];
   const local0=project([s.bounds[0],s.bounds[1]],origin),local1=project([s.bounds[2],s.bounds[3]],origin);
   const boundary: Polygon2=[[[local0[0],local0[1]],[local1[0],local0[1]],local1,[local0[0],local1[1]],local0]];
@@ -217,12 +218,18 @@ export function compileNetwork(source: unknown, selection: unknown, buildings: P
             // Use available short junction-link space for turns, retaining a nonzero middle segment.
             const junction=mode==='drive' && (counts.get(na.id)!>1 || counts.get(nb.id)!>1);
             const trim=Math.min(mode==='drive'?10:1,len*(junction?0.45:0.3));
+            const originalLength=distance(project([na.lon,na.lat],origin),project([nb.lon,nb.lat],origin));
+            const originalTrim=Math.min(mode==='drive'?10:1,originalLength*(junction?0.45:0.3));
+            const startTrim=ports && lo===0?originalTrim:trim, endTrim=ports && hi===1?originalTrim:trim;
+            if(startTrim+endTrim>=len) { note([w.id],'SHORT_CLIPPED_SEGMENT','Insufficient halo length for stable source endpoint margins'); continue; }
             const shifted=(p:XY):XY=>[p[0]+u[1]*offset,p[1]-u[0]*offset];
-            const points=[shifted(lerp(a,b,trim/len)),shifted(lerp(a,b,1-trim/len))];
-            const id=`${mode}/${w.id}/${ordered[i-1]}-${ordered[i]}`;
+            const points=[shifted(lerp(a,b,startTrim/len)),shifted(lerp(a,b,1-endTrim/len))];
+            const physical=`${mode}/${w.id}/${ordered[i-1]}-${ordered[i]}`;
+            const clipSuffix=ports && (lo>0 || hi<1)?`/clip/${[...ga,...gb].map(n=>n.toFixed(9)).join(',')}`:'';
+            const id=`${physical}${clipSuffix}`;
             all.push({start:lo>0?`${id}/clip-start`:`node/${na.id}`,end:hi<1?`${id}/clip-end`:`node/${nb.id}`,
               direction:u,way:w,lane,terminalStart,terminalEnd,
-              edge:{id,sourceIds:[w.id],from:`${id}/start`,to:`${id}/end`,mode,points,length:lineLength(points),
+              edge:{id,sourceIds:[w.id],from:`${ports && lo===0?physical:id}/start`,to:`${ports && hi===1?physical:id}/end`,mode,points,length:lineLength(points),
                 width:mode==='drive'?width/lanes:width,speed,allowed:[],next:[],corridor:[],conflicts:[],inferred}});
           }
         }
@@ -286,7 +293,7 @@ export function compileNetwork(source: unknown, selection: unknown, buildings: P
       }
     }
     const points=curve(a.edge.points.at(-1)!,b.edge.points[0],a.direction,b.direction);
-    const e: Edge={id:`turn/${a.edge.id}/${b.edge.id}`,sourceIds:[...new Set([a.way.id,b.way.id,a.end])],
+    const e: Edge={id:ports?`turn/${a.edge.to}/${b.edge.from}`:`turn/${a.edge.id}/${b.edge.id}`,sourceIds:[...new Set([a.way.id,b.way.id,a.end])],
       from:a.edge.to,to:b.edge.from,mode:a.edge.mode,points,length:lineLength(points),width:Math.min(a.edge.width,b.edge.width),
       speed:Math.min(a.edge.speed,b.edge.speed, a.edge.mode==='drive'?4:1.2),allowed:[],next:[b.edge.id],corridor:[],
       conflicts:[],inferred:['sampled cubic <=0.25m chord; continuous body sweep','car radii 5/5.5m; bus radius 10m']};
@@ -295,7 +302,6 @@ export function compileNetwork(source: unknown, selection: unknown, buildings: P
   addConflicts(network);
   const edgeMap=new Map(network.edges.map(e=>[e.id,e]));
   const centre=project(s.showcase.target,origin), centralRadius=s.showcase.range*0.15;
-  const ports=options.routePolicy==='ports';
   const starts=valid.filter(x=>x.edge.mode==='drive' && x.terminalStart && (ports || distance(x.edge.points[0],centre)>centralRadius));
   const ends=new Set(valid.filter(x=>x.edge.mode==='drive' && x.terminalEnd && (ports || distance(x.edge.points.at(-1)!,centre)>centralRadius)).map(x=>x.edge.id));
   // One directed path per walking source component avoids opposing crowds on
@@ -370,7 +376,7 @@ export function compileNetwork(source: unknown, selection: unknown, buildings: P
   return {network:parseNetwork(network),diagnostics};
 }
 
-function addConflicts(n: Network): void {
+function conflictGeometry(n: Network) {
   const sampled=new Map(n.edges.map(e=>[e.id,e.points.flatMap((p,i)=>{
     if(!i)return [p];
     const a=e.points[i-1],count=Math.ceil(distance(a,p)/2);
@@ -381,6 +387,11 @@ function addConflicts(n: Network): void {
     return [e.id,sweptEnvelope(sampled.get(e.id)!,length,width)];
   }));
   const bounds=new Map(n.edges.map(e=>[e.id,polygonBounds(hull(sweeps.get(e.id)!.flatMap(p=>p[0])))]));
+  return {sampled,sweeps,bounds};
+}
+
+function addConflicts(n: Network): void {
+  const geometry=conflictGeometry(n), {sweeps,bounds}=geometry;
   const nearby=spatialCandidates(n.edges,e=>bounds.get(e.id)!);
   const indices=new Map(n.edges.map((edge,index)=>[edge.id,index]));
   const candidates: {id:string;polygon:Polygon2;edges:string[]}[]=[];
@@ -404,10 +415,16 @@ function addConflicts(n: Network): void {
       candidates.splice(j,1); i=-1; break;
     }
   }
-  for(const z of candidates) {
-    z.id=`zone/${n.zones.length}`;
-    for(const e of n.edges) {
-      if(!boundsOverlap(bounds.get(e.id)!,polygonBounds(z.polygon))) continue;
+  attachConflictZones(n,candidates.map((zone,i)=>({...zone,id:`zone/${i}`})),geometry);
+}
+
+function attachConflictZones(n: Network, zones: Network['zones'], geometry: ReturnType<typeof conflictGeometry>): void {
+  const {sampled,bounds}=geometry, nearby=spatialCandidates(n.edges,e=>bounds.get(e.id)!);
+  n.edges.forEach(edge=>{edge.conflicts=[];});
+  n.zones=[];
+  for(const z of zones) {
+    z.edges=[];
+    for(const e of nearby(polygonBounds(z.polygon))) {
       let at=0,enter=Infinity,exit=-Infinity;
       const length=Math.max(...e.allowed.map(k=>ACTORS[k].length)),width=Math.max(...e.allowed.map(k=>ACTORS[k].width));
       const ps=sampled.get(e.id)!;
@@ -422,6 +439,10 @@ function addConflicts(n: Network): void {
     }
     if(z.edges.length) n.zones.push(z);
   }
+}
+
+export function assignConflictZones(n: Network, zones: Network['zones']): void {
+  attachConflictZones(n,zones,conflictGeometry(n));
 }
 
 export function activeMotorConflict(n: Network): {routes:string[];edges:string[];node:string;zone:string}|undefined {

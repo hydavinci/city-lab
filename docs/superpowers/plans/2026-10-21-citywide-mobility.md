@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-21-citywide-mobility-design.md`
 
-**Execution status (2026-10-21):** Tasks 1–3 implemented on `feat/citywide-mobility`.
+**Execution status (2026-10-21):** Tasks 1–4 implemented on `feat/citywide-mobility`.
 The actual municipality intersects 2,232 acquisition cells. Public-service probes timed out or
 returned HTTP 406; no full-city sources or mobility release have been published. The user approved
 continuing compiler, simulation and UI implementation while leaving publication/data acceptance incomplete.
@@ -252,9 +252,9 @@ extend `tests/fixtures/citywide-mobility.ts` with `twoChunkFixture()`.
 `stitchChunks(chunks: MobilityChunk[]): MobilityChunk[]`,
 `twoChunkFixture(): { left: MobilityChunk; right: MobilityChunk }`.
 
-- [ ] Build a two-cell synthetic road crossing the boundary, plus a junction whose bodies overlap the halo.
+- [x] Build a two-cell synthetic road crossing the boundary, plus a junction whose bodies overlap the halo.
   Use different local origins and a single physical seam, not two copied coordinate systems.
-- [ ] Write failing tests:
+- [x] Write failing tests:
 
 ```ts
 it('gives a shared physical conflict one canonical reservation identity', () => {
@@ -265,17 +265,22 @@ it('gives a shared physical conflict one canonical reservation identity', () => 
 });
 ```
 
-- [ ] Run the stitch tests red. Derive stable edge/port IDs from source segment, direction/lane and boundary
+- [x] Run the stitch tests red. Derive stable edge/port IDs from source segment, direction/lane and boundary
   position. Give each owned segment one cell using a deterministic geographic tie-break.
   Halo copies remain lookahead/validation data, not extra spawn locations.
-- [ ] Reconcile source-backed continuation ports by shared topology, compatible direction/permissions
+- [x] Reconcile source-backed continuation ports by shared topology, compatible direction/permissions
   and geographic endpoints within 0.05 m. Never connect unrelated nearest lines.
   Assign shared junction geometry to one owner using sorted source identities; propagate aliases to
   every halo copy. Split boundaries away from a junction's complete conflict envelope where possible;
   otherwise preserve its single owner and lookahead.
-- [ ] Reject mismatched seams, asymmetric links, duplicate owners, incompatible modes and contradictory
+- [x] Reject mismatched seams, asymmetric links, duplicate owners, incompatible modes and contradictory
   source geometry. Test byte-stable IDs under input reordering and zero actor duplication implications.
-- [ ] Run compiler/stitch tests, type-check; commit `feat: preserve mobility connectivity across cell seams`.
+- [x] Run compiler/stitch tests, type-check; commit `feat: preserve mobility connectivity across cell seams`.
+
+Implementation note: ownership uses whole source-segment midpoints and sourced junction nodes,
+with a stable boundary tie-break. Clipped halo fragments have distinct geographic IDs and remain
+lookahead/validation data, not extra owned spawn geometry (`CLIPPED_HALO_LOOKAHEAD` diagnostics).
+Reconciled conflict polygons recompute complete-body intervals in every intersecting halo network.
 
 ### Task 5: Atomic Citywide Publication and Coverage
 

@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import type { MobilityChunk, MobilityManifest, MobilityResource, SpawnGate } from '../../web/core/mobility';
 import { network } from './enhancements';
-import { unproject } from '../../pipeline/enhancements/geometry';
+import { project, unproject } from '../../pipeline/enhancements/geometry';
+import type { Polygon2, XY } from '../../web/core/enhancements';
 
 // Synthetic local geometry only; never evidence of geographic coverage.
 export function mobilityFixture(): { manifest: MobilityManifest; chunk: MobilityChunk } {
@@ -43,3 +44,33 @@ export function resource(uri: string, text: string): MobilityResource {
 }
 
 export const outsideGate: SpawnGate = { canSpawn: () => true, canRetire: () => true };
+
+export function twoChunkFixture(): { left: MobilityChunk; right: MobilityChunk } {
+  const { chunk } = mobilityFixture(), seam = unproject([40, 0], chunk.network.origin);
+  const left = structuredClone(chunk), right = structuredClone(chunk);
+  left.id = 'cell/left'; right.id = 'cell/right';
+  left.bounds[2] = seam[0]; right.bounds[0] = seam[0];
+  left.ownedEdges = ['a', 'w']; right.ownedEdges = ['b'];
+  left.ports = [
+    { ...chunk.ports[0], id: 'left-in' },
+    { ...chunk.ports[1], id: 'left-out', edge: 'a', coordinate: seam },
+  ];
+  right.ports = [
+    { ...chunk.ports[0], id: 'right-in', edge: 'b', coordinate: seam },
+    { ...chunk.ports[1], id: 'right-out' },
+  ];
+  const old = [...right.network.origin] as XY, origin = unproject([100, 0], old);
+  const convert = (point: XY): XY => project(unproject(point, old), origin);
+  const polygon = (value: Polygon2): Polygon2 => value.map(ring => ring.map(convert));
+  right.network.origin = origin;
+  right.network.buildings = right.network.buildings.map(polygon);
+  right.network.water = right.network.water.map(polygon);
+  for (const edge of right.network.edges) {
+    edge.points = edge.points.map(convert); edge.corridor = edge.corridor.map(polygon);
+    edge.conflicts.forEach(conflict => { conflict.zone = 'different-local-zone'; });
+  }
+  right.network.zones.forEach(zone => { zone.id = 'different-local-zone'; zone.polygon = polygon(zone.polygon); });
+  right.zoneIds = { 'different-local-zone': 'junction/right-unstitched' };
+  right.surfaces.forEach(surface => { surface.points = surface.points.map(convert); });
+  return { left, right };
+}
