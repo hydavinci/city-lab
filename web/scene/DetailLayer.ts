@@ -13,13 +13,14 @@ import { buildingDetails, detailBudget, detailVisible, type DetailSurface } from
 import { geometryBounds, intersects, selectTiles, tileId } from '../core/geo';
 import { project, unproject } from '../../pipeline/enhancements/geometry';
 import { colorMaterial } from './materials';
+import { unreplacedRoadParts } from '../core/mobility';
 
 interface Road {
-  id: string; sourceId: string; line: Position[]; width: number; basis: string; eligible: boolean;
+  id: string; sourceId: string; line: XY[]; width: number; basis: string; eligible: boolean; overviewVisible: boolean;
 }
 interface RoadRegion {
   id: string; bounds: Bounds; count: number; roads: Road[];
-  near?: Primitive; overviewVisible: boolean;
+  near?: Primitive; remainder?: { primitive?: Primitive; roads: Set<string>; instances: string[] };
 }
 interface DetailTile {
   buildings: BuildingFeature[]; active: Set<string>; primitive?: Primitive; diagnostics: Diagnostic[];
@@ -33,6 +34,8 @@ const detailColors: Record<DetailSurface, [string,string]> = {
 export class DetailLayer {
   private collection: PrimitiveCollection;
   private roadRegions = new Map<string, RoadRegion>();
+  private sourceRegions = new Map<string, Set<string>>();
+  private replacedRoads: ReadonlySet<string> = new Set();
   private tiles = new Map<string, DetailTile>();
   private loadedIds = new Set<string>();
   private excludedBuildings: ReadonlySet<string> = new Set();
@@ -204,10 +207,11 @@ export class DetailLayer {
 
   setRoads(collection: FeatureCollection): void {
     if (this.disposed) return;
-    for (const region of this.roadRegions.values()) this.unloadRoad(region);
+    for (const region of this.roadRegions.values()) { this.unloadRoad(region); this.unloadRemainder(region); }
     if (this.overview) this.viewer.scene.primitives.remove(this.overview);
     this.overview = undefined;
     this.roadRegions.clear();
+    this.sourceRegions.clear();
     this.diagnostics = [];
     const instances: GeometryInstance[] = [], ids = new Set<string>();
     for (const feature of collection.features) {
@@ -230,12 +234,15 @@ export class DetailLayer {
         const regionId = tileId(lines[0][0]);
         const bounds: Bounds = [Math.min(...line.map(p=>p[0])),Math.min(...line.map(p=>p[1])),
           Math.max(...line.map(p=>p[0])),Math.max(...line.map(p=>p[1]))];
-        const region = this.roadRegions.get(regionId) ?? { id: regionId, bounds, count: 0, roads: [], overviewVisible: true };
+        const region = this.roadRegions.get(regionId) ?? { id: regionId, bounds, count: 0, roads: [] };
         region.bounds = [Math.min(region.bounds[0],bounds[0]),Math.min(region.bounds[1],bounds[1]),
           Math.max(region.bounds[2],bounds[2]),Math.max(region.bounds[3],bounds[3])];
         region.count++;
-        region.roads.push({ id, sourceId, line, width, basis: p.widthBasis, eligible });
+        region.roads.push({ id, sourceId, line: line.map(point => [point[0], point[1]]),
+          width, basis: p.widthBasis, eligible, overviewVisible: true });
         this.roadRegions.set(regionId,region);
+        const regions = this.sourceRegions.get(sourceId) ?? new Set<string>();
+        regions.add(regionId); this.sourceRegions.set(sourceId, regions);
         instances.push(new GeometryInstance({
           id, attributes: { show: new ShowGeometryInstanceAttribute(true) },
           geometry: new PolylineGeometry({
@@ -251,6 +258,7 @@ export class DetailLayer {
       geometryInstances: instances,
       appearance: new PolylineMaterialAppearance({material:Material.fromType('Color',{color:Color.fromCssColorString('#8f907c')})}),
     }));
+    for (const id of this.replacedRegions(this.replacedRoads)) this.loadRemainder(this.roadRegions.get(id)!);
     if (this.settings) this.update(this.settings);
     this.viewer.scene.requestRender();
   }
@@ -342,17 +350,63 @@ export class DetailLayer {
     if (this.settings) this.update(this.settings);
   }
 
+  setReplacedRoads(ids: ReadonlySet<string>): void {
+    const changed = new Set([...ids].filter(id => !this.replacedRoads.has(id)));
+    for (const id of this.replacedRoads) if (!ids.has(id)) changed.add(id);
+    if (!changed.size) return;
+    this.replacedRoads = new Set(ids);
+    for (const id of this.replacedRegions(changed)) {
+      const region = this.roadRegions.get(id)!, near = Boolean(region.near);
+      this.unloadRoad(region); this.loadRemainder(region);
+      if (near && !this.failure) this.loadRoad(region);
+    }
+    this.syncOverview(); this.viewer.scene.requestRender();
+  }
+
+  private replacedRegions(keys: Iterable<string>): Set<string> {
+    const regions = new Set<string>();
+    for (const key of keys) {
+      const source = /^segment\/((?:way|relation)\/\d+)\//.exec(key)?.[1];
+      if (source) for (const region of this.sourceRegions.get(source) ?? []) regions.add(region);
+    }
+    return regions;
+  }
+  private loadRemainder(region: RoadRegion): void {
+    this.unloadRemainder(region);
+    const roads = new Set<string>(), instances: GeometryInstance[] = [], ids: string[] = [];
+    for (const road of region.roads) {
+      const parts = unreplacedRoadParts(road.sourceId, road.line, this.replacedRoads);
+      if (parts.length === 1 && parts[0].length === road.line.length) continue;
+      roads.add(road.id);
+      parts.forEach((line, index) => {
+        const id = `${road.id}/remainder/${index}`; ids.push(id);
+        instances.push(new GeometryInstance({ id, attributes: { show: new ShowGeometryInstanceAttribute(true) },
+          geometry: new PolylineGeometry({ positions: Cartesian3.fromDegreesArrayHeights(line.flatMap(([x, y]) => [x, y, 5])),
+            width: 1, vertexFormat: PolylineMaterialAppearance.VERTEX_FORMAT }) }));
+      });
+    }
+    if (roads.size) region.remainder = { roads, instances: ids,
+      ...(instances.length ? { primitive: this.collection.add(new Primitive({
+        geometryInstances: instances, appearance: this.overview?.appearance,
+      })) } : {}) };
+  }
+  private unloadRemainder(region: RoadRegion): void {
+    if (region.remainder?.primitive) this.collection.remove(region.remainder.primitive);
+    region.remainder = undefined;
+  }
+
   private loadRoad(region: RoadRegion): void {
     const roads = region.roads.filter(r=>r.eligible && !this.loadedIds.has(r.id));
     if (!roads.length) return;
-    const instances = roads.map(r=>new GeometryInstance({
-      id: {sourceId:r.sourceId,segmentId:r.id,widthMetres:r.width,widthBasis:r.basis,inferred:true},
+    const instances = roads.flatMap(r => unreplacedRoadParts(r.sourceId, r.line, this.replacedRoads).map((line, index) => new GeometryInstance({
+      id: {sourceId:r.sourceId,segmentId:`${r.id}/part/${index}`,widthMetres:r.width,widthBasis:r.basis,inferred:true},
       geometry: new CorridorGeometry({
-        positions: Cartesian3.fromDegreesArray(r.line.flatMap(([x,y])=>[x,y])),
+        positions: Cartesian3.fromDegreesArray(line.flatMap(([x,y])=>[x,y])),
         width:r.width, height:0.3, cornerType:CornerType.BEVELED,
         vertexFormat:MaterialAppearance.MaterialSupport.TEXTURED.vertexFormat,
       }),
-    }));
+    })));
+    if (!instances.length) return;
     region.near = this.collection.add(new Primitive({
       geometryInstances:instances,appearance:this.roadAppearance,releaseGeometryInstances:false,
     }));
@@ -407,15 +461,20 @@ export class DetailLayer {
     if (!this.overview?.ready || this.disposed) return;
     let changed = false;
     for (const region of this.roadRegions.values()) {
-      const show = !region.near?.ready || Boolean(this.failure);
-      if (show===region.overviewVisible) continue;
+      const near = Boolean(region.near?.ready) && !this.failure;
+      const remainder = region.remainder, replacementReady = remainder && (!remainder.primitive || remainder.primitive.ready);
+      if (remainder?.primitive) {
+        const show = Boolean(this.settings?.roads && !near && !this.failure);
+        if (remainder.primitive.show !== show) { remainder.primitive.show = show; changed = true; }
+      }
       for (const road of region.roads) {
-        if (!road.eligible) continue;
+        const show = Boolean(this.failure) || !(near && road.eligible || replacementReady && remainder.roads.has(road.id));
+        if (show === road.overviewVisible) continue;
         const attributes = this.overview.getGeometryInstanceAttributes(road.id);
         attributes.show = ShowGeometryInstanceAttribute.toValue(show,attributes.show);
+        road.overviewVisible = show;
+        changed = true;
       }
-      region.overviewVisible=show;
-      changed=true;
     }
     if (changed) this.viewer.scene.requestRender();
   }
@@ -424,7 +483,7 @@ export class DetailLayer {
     if (this.failure || this.disposed) return;
     this.failure=error instanceof Error ? error : new Error(String(error));
     this.clearDistrictModels();
-    for (const region of this.roadRegions.values()) this.unloadRoad(region);
+    for (const region of this.roadRegions.values()) { this.unloadRoad(region); this.unloadRemainder(region); }
     for (const tile of this.tiles.values()) {
       if (tile.primitive) this.collection.remove(tile.primitive);
       tile.primitive=undefined; tile.active.clear(); tile.diagnostics=[];
@@ -443,6 +502,7 @@ export class DetailLayer {
   retry(): void {
     this.failure=undefined;
     this.districtFailure=undefined;
+    for (const id of this.replacedRegions(this.replacedRoads)) this.loadRemainder(this.roadRegions.get(id)!);
     if (this.settings) this.update(this.settings);
   }
 
@@ -476,7 +536,8 @@ export class DetailLayer {
     this.removeRender();
     this.viewer.scene.primitives.remove(this.collection);
     if (this.overview) this.viewer.scene.primitives.remove(this.overview);
-    this.tiles.clear(); this.roadRegions.clear(); this.loadedIds.clear(); this.diagnostics=[];
+    this.tiles.clear(); this.roadRegions.clear(); this.sourceRegions.clear(); this.replacedRoads = new Set();
+    this.loadedIds.clear(); this.diagnostics=[];
     this.overview=undefined;
   }
 }

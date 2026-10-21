@@ -39,6 +39,32 @@ export interface SpawnGate {
   canSpawn(cell: string, position: XY, kind: ActorKind): boolean;
   canRetire(cell: string, position: XY, kind: ActorKind): boolean;
 }
+export interface MobilityResources {
+  state: 'inactive' | 'loading' | 'ready' | 'no-coverage' | 'paused' | 'error';
+  reason?: 'roads-hidden' | 'user' | 'page-hidden' | 'overview' | 'export';
+  vehicles: number; pedestrians: number; cells: number; models: number;
+  urls: number; pending: number; time: number; failure?: string;
+}
+
+export function roadSegmentId(sourceId: string, a: XY, b: XY): string {
+  identifier(sourceId); geographic(a); geographic(b);
+  const points = [a, b].map(point => point.map(n => n.toFixed(7)).join(',')).sort();
+  return `segment/${sourceId}/${points.join(';')}`;
+}
+export function unreplacedRoadParts(sourceId: string, line: XY[], replaced: ReadonlySet<string>): XY[][] {
+  const parts: XY[][] = [];
+  let current: XY[] = [];
+  for (let i = 1; i < line.length; i++) {
+    if (replaced.has(roadSegmentId(sourceId, line[i - 1], line[i]))) {
+      if (current.length) parts.push(current); current = [];
+    } else {
+      if (!current.length) current.push(line[i - 1]);
+      current.push(line[i]);
+    }
+  }
+  if (current.length) parts.push(current);
+  return parts;
+}
 
 function check(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`Invalid mobility: ${message}`);

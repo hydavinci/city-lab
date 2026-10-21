@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-21-citywide-mobility-design.md`
 
-**Execution status (2026-10-21):** Tasks 1–7 implemented on `feat/citywide-mobility`.
+**Execution status (2026-10-22):** Tasks 1–8 implemented on `feat/citywide-mobility`.
 The actual municipality intersects 2,232 acquisition cells. Public-service probes timed out or
 returned HTTP 406; no full-city sources or mobility release have been published. The user approved
 continuing compiler, simulation and UI implementation while leaving publication/data acceptance incomplete.
@@ -452,26 +452,33 @@ interface MobilityResources {
 `DetailLayer.setReplacedRoads(ids: ReadonlySet<string>): void` hides only source segments
 whose mobility-owned surface is actually render-ready.
 
-- [ ] Write lifecycle tests with deferred real-format JSON/GLB responses and Cesium test doubles:
+- [x] Write lifecycle tests with deferred real-format JSON/GLB responses and Cesium test doubles:
   move to another area before fetch resolves, then assert the old result registers no cells/models.
   Do not assert only that `abort()` was called.
-- [ ] Run red. Load and verify manifest/chunk resource size/hash with 15-second bounded requests.
+- [x] Run red. Load and verify manifest/chunk resource size/hash with 15-second bounded requests.
   Select visible cells plus a prefetch neighbour ring; cap loaded cells initially at 9/16/25 by quality
   and pending requests at 4. These are loader limits in addition to global actor budgets.
   At far overview, deactivate fine simulation rather than selecting the entire municipality.
-- [ ] Keep current visible owners and conflict lookahead pinned; evict offscreen unused cells first.
+- [x] Keep current visible owners and conflict lookahead pinned; evict offscreen unused cells first.
   If pinning fills the limit, stop new arrivals/loading and drain safely rather than exceeding memory
   bounds or deleting visible actors. Use camera changes/visibility tests, not only altitude.
-- [ ] Batch corresponding road/walk surfaces, with matching declared height and one source-owned segment.
+- [x] Batch corresponding road/walk surfaces, with matching declared height and one source-owned segment.
   Swap old road rendering only after replacement readiness; restore it on failure/unload.
   For split source ways, use segment-level IDs to avoid hiding an entire road for one loaded segment.
   Do not construct per-actor road primitives.
-- [ ] Report explicit loading/ready/no-coverage/paused/error states, retain unrelated base city and
+- [x] Report explicit loading/ready/no-coverage/paused/error states, retain unrelated base city and
   provide retry. Abort pending work and invalidate generations on reload/destroy.
-- [ ] Test no-data vs network error, hash mismatch, duplicate surfaces, readiness swaps, failed replacement,
+- [x] Test no-data vs network error, hash mismatch, duplicate surfaces, readiness swaps, failed replacement,
   request limits, pinned cells, rapid camera movement and ten load/unload cycles without resource growth.
-- [ ] Run layer tests and existing detail recovery tests; type-check and commit
+- [x] Run layer tests and existing detail recovery tests; type-check and commit
   `feat: stream bounded mobility cells with source-aligned road surfaces`.
+
+Implementation note: nearby surfaces are deduplicated and double-buffered as one bounded window batch.
+Only render-ready geographic source-segment keys replace static roads. Static overview ways remain
+batched; only affected ways receive bounded remainder geometry, avoiding eager expansion of the
+242,982 source segments into citywide GPU instances. Live bodies and reserved exits pin cells;
+quality reductions drain already pinned cells without admitting more. No models or clock are
+connected yet (Task 9); no real citywide source release has been published.
 
 ### Task 9: True-Scale Models, Gait and Bounded Render Scheduling
 

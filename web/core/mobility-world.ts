@@ -104,6 +104,20 @@ export class MobilityWorld {
     this.rebuildEntries(); this.dirty = true;
   }
 
+  retainedCells(): ReadonlySet<string> {
+    const retained = new Set<string>(), owners = this.reservations.owners();
+    for (const state of this.actors.values()) for (const hop of state.path) {
+      const body = hop.start <= state.progress + state.actor.length / 2
+        && hop.start + hop.edge.length >= state.progress - state.actor.length / 2;
+      const group = this.groups.get(state.actor.id);
+      const reserved = group?.zones.every(zone => owners[zone] === state.actor.id)
+        && hop.start <= group.exit + GAP + state.actor.length / 2
+        && hop.start + hop.edge.length >= group.enter - state.actor.length / 2;
+      if (body || reserved) retained.add(hop.cell.value.id);
+    }
+    return retained;
+  }
+
   setOptions(options: MobilityOptions): void {
     validateOptions(options);
     if (options.seed !== this.options.seed) this.randomState = options.seed;
