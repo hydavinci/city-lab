@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-21-citywide-mobility-design.md`
 
-**Execution status (2026-10-22):** Tasks 1–9 implemented on `feat/citywide-mobility`.
+**Execution status (2026-10-22):** Tasks 1–10 implemented on `feat/citywide-mobility`.
 The actual municipality intersects 2,232 acquisition cells. Public-service probes timed out or
 returned HTTP 406; no full-city sources or mobility release have been published. The user approved
 continuing compiler, simulation and UI implementation while leaving publication/data acceptance incomplete.
@@ -537,7 +537,7 @@ unchanged tests passed in about 24 seconds with a command-scoped `caffeinate -is
 `encodeSettings` writes v2. Add `mobility?: MobilityResources` to SceneStats for activity status;
 initial/unconnected UI renders an explicit inactive state rather than assuming loaded actors.
 
-- [ ] Write the migration regression with an explicit v1 object:
+- [x] Write the migration regression with an explicit v1 object:
 
 ```ts
 it('preserves saved v1 choices while adding documented mobility defaults', () => {
@@ -551,16 +551,20 @@ it('preserves saved v1 choices while adding documented mobility defaults', () =>
 });
 ```
 
-- [ ] Run red. Extend the existing parser/version handling without accepting missing old fields,
+- [x] Run red. Extend the existing parser/version handling without accepting missing old fields,
   invalid booleans or unsupported versions. Keep lookup of the old localStorage key compatible so
   users' v1 choices are found; migrate on successful parse/save, not by discarding old data.
-- [ ] Add accessible controls labelled “模拟车辆”, “模拟行人”, “暂停模拟”/“继续模拟”,
+- [x] Add accessible controls labelled “模拟车辆”, “模拟行人”, “暂停模拟”/“继续模拟”,
   counts and “模拟活动，非实时交通”. Distinguish loading, no coverage, roads disabled,
   manual pause and failed resources. Keep existing place navigation unchanged.
-- [ ] Update directly dependent fixtures/settings literals to v2, retaining explicit v1 migration tests.
+- [x] Update directly dependent fixtures/settings literals to v2, retaining explicit v1 migration tests.
   Do not change exported geographic manifests or silently default malformed configuration.
-- [ ] Run settings tests and controls browser test, type-check; commit
+- [x] Run settings tests and controls browser test, type-check; commit
   `feat: add migratable vehicle and pedestrian simulation controls`.
+
+Implementation note: valid v1 settings migrate in place under the existing storage key, preserving
+all old values. New exports use v2 and malformed v2 activity fields fail explicitly. The controls
+show zero/unready rather than claiming live traffic until Task 11 connects production scene state.
 
 ### Task 11: Homepage Lifecycle, Freeze-Safe Export and Error Isolation
 

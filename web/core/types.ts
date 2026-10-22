@@ -1,4 +1,5 @@
 import type { Feature, MultiPolygon, Polygon } from 'geojson';
+import type { MobilityResources } from './mobility';
 
 export type Bounds = [number, number, number, number];
 export type SourceHeightBasis = 'height' | 'levels' | 'fallback';
@@ -40,7 +41,7 @@ export interface CityManifest {
   tiles: TileInfo[];
 }
 export interface SceneSettings {
-  version: 1;
+  version: 2;
   night: boolean;
   glow: number;
   quality: 'low' | 'medium' | 'high';
@@ -50,6 +51,9 @@ export interface SceneSettings {
   green: boolean;
   boundary: boolean;
   labels: boolean;
+  vehicles: boolean;
+  pedestrians: boolean;
+  mobilityPaused: boolean;
 }
 export interface SceneStats {
   loadedTiles: number;
@@ -59,4 +63,5 @@ export interface SceneStats {
   height: number;
   longitude: number;
   latitude: number;
+  mobility?: MobilityResources;
 }
