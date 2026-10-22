@@ -11,7 +11,7 @@ const GAP = 0.5, END_MARGIN = 0.05;
 interface LoadedChunk { value: MobilityChunk; edges: Map<string, Edge>; owned: Set<string> }
 interface Hop { cell: LoadedChunk; edge: Edge; route: Route; index: number; start: number }
 interface Moving {
-  actor: MobileActor; path: Hop[]; index: number; progress: number; entry: string; occupied: Set<string>;
+  actor: MobileActor; path: Hop[]; index: number; progress: number; previousProgress: number; entry: string; occupied: Set<string>;
 }
 interface Occupant { centre: number; back: number }
 interface Entry { cell: LoadedChunk; route: Route; index: number; kind: ActorKind }
@@ -126,7 +126,7 @@ export class MobilityWorld {
 
   step(gate: SpawnGate): void {
     this.advanced = false; this.dirty = false;
-    for (const state of this.actors.values()) this.extend(state);
+    for (const state of this.actors.values()) { state.previousProgress = state.progress; this.extend(state); }
     this.occupancy.clear();
     for (const state of this.actors.values()) { state.occupied.clear(); this.occupy(state); }
     this.refreshExitStorage();
@@ -146,6 +146,23 @@ export class MobilityWorld {
     return { time: this.time, actors: [...this.actors.values()].map(state => ({
       ...state.actor, position: [...state.actor.position],
     })), owners: this.reservations.owners(), passedByEntry: { ...this.passed }, travelledByKind: { ...this.travelled } };
+  }
+
+  interpolated(alpha: number): WorldSnapshot {
+    check(Number.isFinite(alpha) && alpha >= 0 && alpha <= 1, 'Invalid interpolation fraction');
+    const snapshot = this.snapshot();
+    return { ...snapshot, actors: snapshot.actors.map(actor => {
+      const state = this.actors.get(actor.id)!, progress = state.previousProgress + (state.progress - state.previousProgress) * alpha;
+      let index = state.path.length - 1;
+      while (index > 0 && state.path[index].start > progress) index--;
+      const hop = state.path[index], along = progress - hop.start;
+      const remaining = state.progress - progress;
+      return { ...actor, cell: hop.cell.value.id, edge: hop.edge.id, distance: along, ...pose(hop.edge, along),
+        walkPhase: walking(actor.kind) ? ((actor.walkPhase - remaining / 1.2) % 1 + 1) % 1 : actor.walkPhase };
+    }) };
+  }
+  finishInterpolation(): void {
+    for (const state of this.actors.values()) state.previousProgress = state.progress;
   }
 
   nextWakeTime(): number | undefined {
@@ -221,7 +238,7 @@ export class MobilityWorld {
         route: `${entry.cell.value.id}/${entry.route.id}`, cell: entry.cell.value.id, edge: edge.id,
         distance: progress, speed: 0, length: body.length, width: body.width,
         ...position, walkPhase: 0 };
-      const state: Moving = { actor, progress, index: 0, entry: actor.route, occupied: new Set(),
+      const state: Moving = { actor, progress, previousProgress: progress, index: 0, entry: actor.route, occupied: new Set(),
         path: [{ cell: entry.cell, route: entry.route, index: entry.index, edge, start: 0 }] };
       this.extend(state);
       const overlaps = [...(this.occupancy.get(edge.id)?.values() ?? []), ...(this.exitStorage.get(edge.id)?.values() ?? [])].some(occupant =>
@@ -383,7 +400,8 @@ export class MobilityWorld {
       this.actors.delete(actor.id); this.passed[state.entry] = (this.passed[state.entry] ?? 0) + 1;
       this.reservations.release(actor.id); this.groups.delete(actor.id);
     }
-    while (state.index > 0 && state.path[0].start + state.path[0].edge.length < state.progress - actor.length / 2 - GAP) {
+    while (state.index > 0 && state.path[0].start + state.path[0].edge.length
+      < Math.min(state.previousProgress, state.progress - actor.length / 2 - GAP)) {
       state.path.shift(); state.index--;
     }
   }

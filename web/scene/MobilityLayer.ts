@@ -1,15 +1,17 @@
 import {
   BoundingSphere, Cartesian2, Cartesian3, Color, CorridorGeometry, CornerType, GeometryInstance,
   MaterialAppearance, Math as CesiumMath, Primitive, PrimitiveCollection,
+  Matrix3, Matrix4, Model, ModelAnimationLoop, Transforms,
   type Camera, type Ellipsoid, type Event, type Ray,
 } from 'cesium';
 import type { Bounds, SceneSettings } from '../core/types';
-import { parseEnhancementManifest, type EnhancementManifest, type XY } from '../core/enhancements';
+import { parseEnhancementManifest, type ActorKind, type EnhancementManifest, type XY } from '../core/enhancements';
 import {
   mobilityBudget, parseMobilityChunk, parseMobilityManifest, roadSegmentId,
-  type MobilityCell, type MobilityChunk, type MobilityManifest, type MobilityResource, type MobilityResources,
+  type MobileActor, type MobilityCell, type MobilityChunk, type MobilityManifest, type MobilityResource, type MobilityResources, type WorldSnapshot,
 } from '../core/mobility';
 import { MobilityWorld } from '../core/mobility-world';
+import { MobilityClock } from '../core/mobility-clock';
 import { intersects } from '../core/geo';
 import { distance, project, unproject } from '../../pipeline/enhancements/geometry';
 import { colorMaterial } from './materials';
@@ -40,6 +42,7 @@ export class MobilityLayer {
   private controller = new AbortController();
   private generation = 0;
   private wanted = new Set<string>();
+  private pins = '';
   private batch?: Batch;
   private preparing?: Batch;
   private dirty = false;
@@ -51,6 +54,19 @@ export class MobilityLayer {
   private disposed = false;
   private replaced = new Set<string>();
   private removeEvents: (() => void)[];
+  private clock = new MobilityClock();
+  private clockActive = false;
+  private raf?: number;
+  private timer?: ReturnType<typeof setTimeout>;
+  private freezes = 0;
+  private frozen?: WorldSnapshot;
+  private models = new Map<number, { model: Model; animated: boolean; deadline: number }>();
+  private modelPending = new Map<number, number>();
+  private modelEpoch = 0;
+  private poses = new Map<number, MobileActor>();
+  private urls = new Map<ActorKind, Promise<string>>();
+  private blobs = new Set<string>();
+  private assetAbort = new AbortController();
   private appearance = new MaterialAppearance({ material: colorMaterial('#70756e'), translucent: false, flat: true });
 
   constructor(private viewer: MobilityViewer, private onError: (message: string) => void,
@@ -68,12 +84,31 @@ export class MobilityLayer {
       viewer.camera.changed.addEventListener(() => { if (this.settings) this.update(this.settings); }),
       viewer.scene.postRender.addEventListener(() => this.frame()),
     ];
+    if (typeof document !== 'undefined') {
+      const visibility = () => { this.stopClock(); this.wake(); };
+      document.addEventListener('visibilitychange', visibility);
+      this.removeEvents.push(() => document.removeEventListener('visibilitychange', visibility));
+    }
   }
   get error(): Error | undefined { return this.failure; }
   get progress(): number { return this.completed; }
   get ready(): boolean {
     const state = this.resources().state;
+    if (this.active && (this.loading || this.pending.size || this.preparing || this.dirty
+      || this.modelPending.size || [...this.models.values()].some(record => !record.model.ready)
+      || [...this.wanted].some(id => !this.cells.get(id)?.registered))) return false;
     return ['ready', 'inactive', 'paused', 'no-coverage'].includes(state);
+  }
+
+  freeze(): () => void {
+    if (!this.freezes++) this.frozen = this.world.interpolated(this.clock.alpha);
+    this.stopClock();
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      if (!--this.freezes) { this.frozen = undefined; this.world.finishInterpolation(); this.wake(); }
+    };
   }
 
   async load(baseDataset: string): Promise<void> {
@@ -100,6 +135,7 @@ export class MobilityLayer {
     const view = this.view();
     this.active = Boolean(settings.roads && view);
     const retained = this.world.retainedCells(), wanted = new Set(retained);
+    this.pins = [...retained].sort().join(';');
     this.coverage = false;
     if (this.active && this.manifest && view) {
       const visible = this.manifest.cells.filter(cell => intersects(cell.bounds, view.bounds));
@@ -128,7 +164,7 @@ export class MobilityLayer {
       if (this.batch) this.publish(this.batch.keys);
     }
     if (recolor) this.viewer.scene.requestRender();
-    this.pump();
+    this.pump(); this.syncModels(); this.wake();
   }
 
   retry(): Promise<void> {
@@ -146,12 +182,14 @@ export class MobilityLayer {
     else if (!this.active) { state = 'inactive'; reason = 'overview'; }
     else if (!this.coverage) state = 'no-coverage';
     else if (this.pending.size || this.preparing || this.dirty || [...this.wanted].some(id =>
-      !this.cells.get(id)?.registered)) state = 'loading';
+      !this.cells.get(id)?.registered) || this.modelPending.size || [...this.models.values()].some(record => !record.model.ready)) state = 'loading';
+    else if (this.freezes) { state = 'paused'; reason = 'export'; }
+    else if (typeof document !== 'undefined' && document.hidden) { state = 'paused'; reason = 'page-hidden'; }
     const actors = snapshot.actors;
     return { state, ...(reason ? { reason } : {}), cells: this.disposed ? 0 : this.cells.size,
       vehicles: actors.filter(actor => !actor.kind.startsWith('person-')).length,
       pedestrians: actors.filter(actor => actor.kind.startsWith('person-')).length,
-      models: 0, urls: 0, pending: this.disposed ? 0 : this.inFlight.size, time: snapshot.time,
+      models: this.models.size, urls: this.blobs.size, pending: this.disposed ? 0 : this.inFlight.size + this.modelPending.size, time: snapshot.time,
       ...(this.failure ? { failure: this.failure.message } : {}) };
   }
 
@@ -178,6 +216,9 @@ export class MobilityLayer {
     return distance(project([(cell.bounds[0] + cell.bounds[2]) / 2, (cell.bounds[1] + cell.bounds[3]) / 2], centre), [0, 0]);
   }
   private async read(url: string, signal: AbortSignal, expected?: MobilityResource): Promise<unknown> {
+    return JSON.parse(new TextDecoder().decode(await this.readBytes(url, signal, expected)));
+  }
+  private async readBytes(url: string, signal: AbortSignal, expected?: Pick<MobilityResource, 'bytes' | 'sha256'>): Promise<ArrayBuffer> {
     signal.throwIfAborted();
     while (this.inFlight.size >= 4) { await Promise.race(this.inFlight); signal.throwIfAborted(); }
     let release!: () => void;
@@ -192,7 +233,7 @@ export class MobilityLayer {
           .map(n => n.toString(16).padStart(2, '0')).join('');
         if (bytes.byteLength !== expected.bytes || hash !== expected.sha256) throw new Error(`Activity bytes/hash mismatch: ${url}`);
       }
-      return JSON.parse(new TextDecoder().decode(bytes));
+      return bytes;
     } finally { this.inFlight.delete(done); release(); }
   }
   private pump(): void {
@@ -262,15 +303,18 @@ export class MobilityLayer {
     this.preparing = { primitive, keys }; this.viewer.scene.requestRender();
   }
   private frame(): void {
-    if (this.disposed || this.failure || !this.preparing?.primitive.ready) return;
+    if (this.disposed || this.failure) return;
     try {
-      if (this.batch) this.collection.remove(this.batch.primitive);
-      this.batch = this.preparing; this.preparing = undefined;
-      for (const record of this.cells.values()) if (!record.registered) {
-        this.world.addChunk(record.chunk); record.registered = true; this.completed++;
+      if (this.preparing?.primitive.ready) {
+        if (this.batch) this.collection.remove(this.batch.primitive);
+        this.batch = this.preparing; this.preparing = undefined;
+        for (const record of this.cells.values()) if (!record.registered) {
+          this.world.addChunk(record.chunk); record.registered = true; this.completed++;
+        }
+        if (this.active) this.publish(this.batch.keys);
+        this.viewer.scene.requestRender();
       }
-      if (this.active) this.publish(this.batch.keys);
-      this.viewer.scene.requestRender();
+      this.syncModels(); this.wake();
     } catch (error) { this.fail(error); }
   }
   private hide(): void {
@@ -285,10 +329,13 @@ export class MobilityLayer {
   private fail(value: unknown): void {
     if (this.failure || this.disposed) return;
     this.failure = value instanceof Error ? value : new Error(String(value));
+    this.stopClock();
+    queueMicrotask(() => { if (!this.disposed) { this.hide(); this.clearModels(); } });
     this.onError(`模拟活动加载失败：${this.failure.message}。基础城市仍可浏览，可重试。`);
     this.viewer.scene.requestRender();
   }
   private reset(): void {
+    this.stopClock(); this.clearModels();
     this.generation++; this.controller.abort(); this.controller = new AbortController();
     this.pending.forEach(controller => controller.abort());
     this.cells.clear(); this.world.clear(); this.manifest = undefined; this.assets = undefined;
@@ -296,5 +343,163 @@ export class MobilityLayer {
     if (this.preparing) this.collection.remove(this.preparing.primitive);
     if (this.batch) this.collection.remove(this.batch.primitive);
     this.preparing = undefined; this.batch = undefined; this.publish(new Set());
+  }
+
+  private paused(): boolean {
+    return this.disposed || !this.active || Boolean(this.failure) || !this.batch || this.freezes > 0
+      || typeof document !== 'undefined' && document.hidden;
+  }
+  private gate() {
+    const view = this.view();
+    const outside = (cell: string, position: XY, kind: ActorKind) => {
+      const chunk = this.cells.get(cell)?.chunk;
+      if (!view || !chunk) return false;
+      const point = unproject(position, chunk.network.origin);
+      const radius = kind === 'bus' ? 5.2 : kind.startsWith('person-') ? 0.7 : 2.6;
+      const lo = unproject([position[0] - radius, position[1] - radius], chunk.network.origin);
+      const hi = unproject([position[0] + radius, position[1] + radius], chunk.network.origin);
+      return !intersects([lo[0], lo[1], hi[0], hi[1]], view.bounds) && point.every(Number.isFinite);
+    };
+    return { canRetire: outside, canSpawn: (cell: string, position: XY, kind: ActorKind) => {
+      const chunk = this.cells.get(cell)?.chunk;
+      return Boolean(view && chunk && this.wanted.has(cell) && outside(cell, position, kind)
+        && distance(project(unproject(position, chunk.network.origin), view.centre), [0, 0]) < 1500);
+    } };
+  }
+  private wake(): void {
+    if (typeof requestAnimationFrame !== 'function') return;
+    if (this.paused()) { this.stopClock(); return; }
+    const moving = this.models.size > 0 && this.world.snapshot().actors.some(actor => actor.speed > 0)
+      || this.modelPending.size > 0 || [...this.models.values()].some(record => !record.model.ready);
+    if (!moving && this.world.nextWakeTime() === undefined) { this.stopClock(); return; }
+    if (!this.clockActive) { this.clock.advance(performance.now(), true, () => {}); this.clockActive = true; }
+    if (this.raf !== undefined || this.timer !== undefined) return;
+    const tick = () => {
+      this.raf = undefined; this.timer = undefined;
+      if (this.paused()) { this.stopClock(); return; }
+      try {
+        const steps = this.clock.advance(performance.now(), true, () => this.world.step(this.gate()));
+        this.syncModels();
+        if (moving || steps && this.models.size) this.viewer.scene.requestRender();
+        if (steps && this.settings && [...this.world.retainedCells()].sort().join(';') !== this.pins) this.update(this.settings);
+        if (steps) this.pump();
+        this.wake();
+      } catch (error) { this.fail(error); }
+    };
+    if (moving) this.raf = requestAnimationFrame(tick);
+    else this.timer = setTimeout(tick, 50);
+  }
+  private stopClock(): void {
+    if (this.raf !== undefined) cancelAnimationFrame(this.raf);
+    if (this.timer !== undefined) clearTimeout(this.timer);
+    this.raf = undefined; this.timer = undefined;
+    if (this.clockActive) {
+      this.clockActive = false; this.clock.reset(); this.world.finishInterpolation();
+      this.viewer.scene.requestRender();
+    }
+  }
+  private syncModels(): void {
+    if (this.disposed || !this.active || this.failure) {
+      if (this.models.size || this.modelPending.size || this.urls.size) this.clearModels();
+      return;
+    }
+    const snapshot = this.frozen ?? this.world.interpolated(this.clock.alpha);
+    const view = this.view();
+    const nearby = snapshot.actors.filter(actor => {
+      const chunk = this.cells.get(actor.cell)?.chunk;
+      return view && chunk && distance(project(unproject(actor.position, chunk.network.origin), view.centre), [0, 0]) <= 1500;
+    });
+    this.poses = new Map(nearby.map(actor => [actor.id, actor]));
+    for (const [id, record] of this.models) if (!this.poses.has(id)) {
+      this.collection.remove(record.model); this.models.delete(id);
+    }
+    for (const actor of nearby) {
+      const record = this.models.get(actor.id);
+      if (!record) {
+        if (!this.modelPending.has(actor.id)) void this.loadModel(actor);
+        continue;
+      }
+      record.model.modelMatrix = this.matrix(actor);
+      if (!record.model.ready) {
+        if (performance.now() > record.deadline) throw new Error(`Activity model readiness timed out: ${actor.kind}`);
+        this.viewer.scene.requestRender();
+      } else if (actor.kind.startsWith('person-') && !record.animated) {
+        record.model.activeAnimations.animateWhilePaused = true;
+        record.model.activeAnimations.add({ name: 'Walk', loop: ModelAnimationLoop.REPEAT,
+          animationTime: () => {
+            const pose = this.poses.get(actor.id);
+            return pose && pose.speed > 1e-3 ? pose.walkPhase : 0;
+          } });
+        record.animated = true;
+      }
+    }
+  }
+  private matrix(actor: MobileActor): Matrix4 {
+    const chunk = this.cells.get(actor.cell)?.chunk;
+    if (!chunk) throw new Error(`Missing actor cell: ${actor.cell}`);
+    const edge = chunk.network.edges.find(edge => edge.id === actor.edge)!;
+    const surface = chunk.surfaces.find(surface => surface.sourceIds.some(id => edge.sourceIds.includes(id)));
+    if (!surface) throw new Error(`Missing displayed actor surface: ${actor.edge}`);
+    const coordinate = unproject(actor.position, chunk.network.origin);
+    const enu = Transforms.eastNorthUpToFixedFrame(Cartesian3.fromDegrees(...coordinate, surface.height));
+    return Matrix4.multiply(enu, Matrix4.fromRotationTranslation(Matrix3.fromRotationZ(Math.PI / 2 - actor.heading)), new Matrix4());
+  }
+  private assetURL(kind: ActorKind): Promise<string> {
+    const existing = this.urls.get(kind);
+    if (existing) return existing;
+    const asset = this.assets?.assets.find(asset => asset.kind === kind);
+    if (!asset) return Promise.reject(new Error(`Missing activity asset: ${kind}`));
+    const epoch = this.modelEpoch, signal = AbortSignal.any([this.assetAbort.signal, this.controller.signal]);
+    const promise = this.readBytes(`/enhancements/${asset.uri}`, signal, asset).then(bytes => {
+      if (this.disposed || epoch !== this.modelEpoch) throw new Error('Obsolete activity asset');
+      const url = URL.createObjectURL(new Blob([bytes], { type: 'model/gltf-binary' }));
+      this.blobs.add(url); return url;
+    });
+    this.urls.set(kind, promise); return promise;
+  }
+  private async loadModel(actor: MobileActor): Promise<void> {
+    const epoch = this.modelEpoch;
+    const signal = this.assetAbort.signal;
+    this.modelPending.set(actor.id, epoch);
+    let timer: ReturnType<typeof setTimeout> | undefined, expired = false;
+    let removeAbort: (() => void) | undefined;
+    try {
+      const url = await this.assetURL(actor.kind);
+      if (this.disposed || epoch !== this.modelEpoch || !this.poses.has(actor.id)) return;
+      const pending = Model.fromGltfAsync({ url, modelMatrix: this.matrix(this.poses.get(actor.id)!), scale: 1,
+        minimumPixelSize: 0, id: { activity: actor.id, kind: actor.kind } }).then(model => {
+        if (expired || this.disposed || epoch !== this.modelEpoch || !this.poses.has(actor.id)) {
+          model.destroy(); throw new Error('Obsolete activity model');
+        }
+        return model;
+      });
+      const model = await Promise.race([pending, new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => { expired = true; reject(new Error(`Activity model decode timed out: ${actor.kind}`)); }, 15000);
+        const abort = () => { expired = true; reject(new DOMException('Obsolete activity model', 'AbortError')); };
+        signal.addEventListener('abort', abort, { once: true });
+        removeAbort = () => signal.removeEventListener('abort', abort);
+        if (signal.aborted) abort();
+      })]);
+      if (this.disposed || epoch !== this.modelEpoch || !this.poses.has(actor.id)) { model.destroy(); return; }
+      model.errorEvent.addEventListener(error => queueMicrotask(() => {
+        if (!this.disposed && epoch === this.modelEpoch) this.fail(error);
+      }));
+      this.collection.add(model); this.models.set(actor.id, { model, animated: false, deadline: performance.now() + 15000 });
+      this.completed++; this.viewer.scene.requestRender();
+    } catch (error) {
+      if (this.disposed || epoch !== this.modelEpoch || !this.poses.has(actor.id)) return;
+      this.fail(error);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+      removeAbort?.();
+      if (this.modelPending.get(actor.id) === epoch) this.modelPending.delete(actor.id);
+      this.wake();
+    }
+  }
+  private clearModels(): void {
+    this.modelEpoch++; this.assetAbort.abort(); this.assetAbort = new AbortController();
+    this.models.forEach(record => this.collection.remove(record.model)); this.models.clear();
+    this.modelPending.clear(); this.poses.clear(); this.urls.clear();
+    this.blobs.forEach(url => URL.revokeObjectURL(url)); this.blobs.clear();
   }
 }

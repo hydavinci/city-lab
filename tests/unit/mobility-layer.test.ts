@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  Cartesian3, Cartographic, Ellipsoid, Event, Math as CesiumMath, PrimitiveCollection, Ray, Rectangle, Viewer,
+  Cartesian3, Cartographic, Ellipsoid, Event, Math as CesiumMath, Model, PrimitiveCollection, Ray, Rectangle, Viewer,
 } from 'cesium';
 import { MobilityLayer } from '../../web/scene/MobilityLayer';
 import { DetailLayer } from '../../web/scene/DetailLayer';
 import { defaultSettings } from '../../web/core/settings';
 import { roadSegmentId, unreplacedRoadParts, type MobilityCell, type MobilityChunk, type MobilityManifest } from '../../web/core/mobility';
-import { manifest as districtManifest } from '../fixtures/enhancements';
+import { manifest as districtManifest, publicationFixture } from '../fixtures/enhancements';
 import { mobilityFixture, resource, outsideGate, twoChunkFixture } from '../fixtures/citywide-mobility';
 import { stitchChunks } from '../../pipeline/mobility/stitch';
 import { unproject } from '../../pipeline/enhancements/geometry';
@@ -16,10 +16,22 @@ import type { MobilityWorld } from '../../web/core/mobility-world';
 const rendered = vi.hoisted(() => ({ primitives: [] as {
   ready: boolean; show: boolean; broken?: boolean; destroyed: boolean; options: Record<string, unknown>;
   getGeometryInstanceAttributes(id: unknown): { show: Uint8Array };
-}[] }));
+}[], models: [] as { destroyed: boolean }[] }));
 vi.mock('cesium', async original => {
   const cesium = await original<typeof import('cesium')>();
-  return { ...cesium, Primitive: class {
+  class Model {
+    ready = true; destroyed = false; readyEvent = new cesium.Event(); errorEvent = new cesium.Event();
+    modelMatrix: unknown; show = true; id: unknown;
+    activeAnimations = { animateWhilePaused: false, add: () => ({}) };
+    constructor(options: { modelMatrix: unknown; id: unknown }) {
+      this.modelMatrix = options.modelMatrix; this.id = options.id; rendered.models.push(this);
+    }
+    static async fromGltfAsync(options: { modelMatrix: unknown; id: unknown }) { return new Model(options); }
+    destroy() { this.destroyed = true; }
+    isDestroyed() { return this.destroyed; }
+    update() {}
+  }
+  return { ...cesium, Model, Primitive: class {
     ready = false; show = true; destroyed = false; broken = false;
     appearance: unknown;
     attributes = new Map<unknown, { show: Uint8Array }>();
@@ -37,11 +49,15 @@ vi.mock('cesium', async original => {
 });
 
 const layers: MobilityLayer[] = [];
-function cells(chunks: MobilityChunk[]): { manifest: MobilityManifest; files: Map<string, string> } {
+function cells(chunks: MobilityChunk[]): { manifest: MobilityManifest; files: Map<string, string | Uint8Array<ArrayBuffer>> } {
   const fixture = mobilityFixture(), manifest = structuredClone(fixture.manifest);
-  const files = new Map<string, string>(), assets = JSON.stringify(districtManifest);
+  const files = new Map<string, string | Uint8Array<ArrayBuffer>>(), fixtureAssets = publicationFixture();
+  const assets = JSON.stringify({ ...districtManifest, assets: fixtureAssets.assets.map(asset =>
+    ({ ...asset, uri: `${districtManifest.id}/${asset.uri}` })) });
   manifest.assets = resource('enhancements/manifest.json', assets);
   files.set('/enhancements/manifest.json', assets);
+  for (const asset of fixtureAssets.assets) files.set(`/enhancements/${districtManifest.id}/${asset.uri}`,
+    new Uint8Array(asset.animation ? fixtureAssets.personGlb : fixtureAssets.glb));
   manifest.cells = chunks.map(chunk => {
     const text = JSON.stringify(chunk), uri = `mobility/${manifest.id}/${chunk.id.replace('/', '-')}.json`;
     files.set(`/${uri}`, text);
@@ -124,6 +140,7 @@ function setup(chunks = [mobilityFixture().chunk]) {
 afterEach(() => {
   layers.splice(0).forEach(layer => layer.destroy());
   rendered.primitives.length = 0; vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers();
+  rendered.models.length = 0;
 });
 
 describe('bounded nearby mobility loading', () => {
@@ -275,6 +292,39 @@ describe('bounded nearby mobility loading', () => {
     expect(fixture.layer.resources().cells).toBe(2);
     expect(world.snapshot().actors[0]).toEqual(before);
     expect(world.retainedCells().has(before.cell)).toBe(true);
+  });
+
+  it('uses nested idempotent export freezes without altering the saved user settings', async () => {
+    const fixture = setup();
+    await fixture.layer.load('0123456789abcdef'); await fixture.settle();
+    const before = { ...defaultSettings }, first = fixture.layer.freeze(), second = fixture.layer.freeze();
+    expect(fixture.layer.resources()).toMatchObject({ state: 'paused', reason: 'export' });
+    first(); first();
+    expect(fixture.layer.resources().reason).toBe('export');
+    second();
+    expect(fixture.layer.resources().state).toBe('ready');
+    expect(defaultSettings).toEqual(before);
+  });
+
+  it('destroys a late native model instead of re-registering it after the layer is destroyed', async () => {
+    const fixture = setup();
+    await fixture.layer.load('0123456789abcdef'); await fixture.settle();
+    const native = Model.fromGltfAsync.bind(Model);
+    let resolve!: (model: Model) => void;
+    const pending = new Promise<Model>(done => { resolve = done; });
+    const decode = vi.spyOn(Model, 'fromGltfAsync').mockReturnValueOnce(pending);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const world: MobilityWorld = Reflect.get(fixture.layer, 'world');
+    world.setOptions({ seed: 7, vehicles: 1, pedestrians: 0, arrivals: true });
+    world.step(outsideGate); fixture.frame();
+    await vi.waitFor(() => expect(decode).toHaveBeenCalledOnce());
+    fixture.layer.destroy();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vi.getTimerCount()).toBe(0);
+    const model = await native(decode.mock.calls[0][0]); resolve(model);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(model.isDestroyed()).toBe(true);
+    expect(fixture.layer.resources()).toMatchObject({ models: 0, urls: 0, cells: 0, pending: 0 });
   });
 
   it('restores static roads after a surface failure and does not re-enable failed replacements on later settings', async () => {

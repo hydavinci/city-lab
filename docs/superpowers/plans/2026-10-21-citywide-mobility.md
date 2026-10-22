@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-21-citywide-mobility-design.md`
 
-**Execution status (2026-10-22):** Tasks 1–8 implemented on `feat/citywide-mobility`.
+**Execution status (2026-10-22):** Tasks 1–9 implemented on `feat/citywide-mobility`.
 The actual municipality intersects 2,232 acquisition cells. Public-service probes timed out or
 returned HTTP 406; no full-city sources or mobility release have been published. The user approved
 continuing compiler, simulation and UI implementation while leaving publication/data acceptance incomplete.
@@ -491,9 +491,9 @@ verified model axis convention in `assets/city/SOURCES.md`.
 **Produces:** MobilityLayer renders actor transforms/animations, exposes
 `freeze(): () => void` as an idempotent release lease, and includes model readiness in `ready`.
 
-- [ ] Write failing fixed-clock tests: 1-second stall performs at most five steps, tab resume resets
+- [x] Write failing fixed-clock tests: 1-second stall performs at most five steps, tab resume resets
   the baseline, explicit pause performs zero steps, and actors waiting for a future arrival still wake.
-- [ ] Run red. Maintain one independent monotonic accumulator; clamp backlog to five 0.05-second steps
+- [x] Run red. Maintain one independent monotonic accumulator; clamp backlog to five 0.05-second steps
   and reset on pause/resume. Use bounded scheduled rendering while moving; remove idle work when paused
   or inactive, and use `world.nextWakeTime()` to schedule required arrival/decision wakes when everyone
   is stationary. New chunks/settings independently wake the layer; undefined means no timed wake.
@@ -501,20 +501,29 @@ verified model axis convention in `assets/city/SOURCES.md`.
   unchanged render frames. Do not sleep several simulated seconds and then advance only one step,
   or fast-forward moving actors to make the clocks agree.
   Do not unfreeze or advance the city sun clock.
-- [ ] Cache verified asset bytes/URLs by kind and generation; match existing download/hash/error
+- [x] Cache verified asset bytes/URLs by kind and generation; match existing download/hash/error
   patterns without swallowing failures. Instantiate only permitted nearby actors, scale 1,
   minimumPixelSize 0; use the existing ENU/heading conversion exactly once.
   Set height from the displayed surface, not the ground-zero assumption.
-- [ ] Drive Walk from distance-derived phase; stop in a stable neutral pose without changing body
+- [x] Drive Walk from distance-derived phase; stop in a stable neutral pose without changing body
   envelope. Use per-model animation phase so two people need not march in lockstep. Do not introduce
   unsupported interpolations/skins or edit certified model scale.
-- [ ] Implement freeze leases for nested screenshots/pauses without mutating persisted settings.
+- [x] Implement freeze leases for nested screenshots/pauses without mutating persisted settings.
   Ensure late model completion destroys stale instances and never re-registers obsolete actors.
-- [ ] Browser-test actual model orientation and vertex height at cardinal headings, visible movement
+- [x] Browser-test actual model orientation and vertex height at cardinal headings, visible movement
   over multiple frames, leg matrices changing while walking, stable stop pose, and unchanged solar time.
   Use real GLBs and real rendering rather than unit mocks as visual acceptance.
-- [ ] Run clock/layer/world tests and `npx playwright test tests/e2e/mobility-models.spec.ts`;
+- [x] Run clock/layer/world tests and `npx playwright test tests/e2e/mobility-models.spec.ts`;
   type-check and commit `feat: animate true-scale city actors with bounded simulation timing`.
+
+Implementation note: a browser-safe clock owns fixed steps; interpolation samples the same certified
+edge history, including corners and seams. Models use per-position geodetic ENU at the declared
+surface height, retaining the existing heading/axis conversion exactly once. This avoids tangent-plane
+height drift across kilometre-scale chunks. Inactive/hidden views release model URLs and decoder
+deadlines; stale native models are destroyed. Actual GLBs pass browser orientation, vertex-height,
+gait, frame-motion and frozen-solar-clock checks on a synthetic inspection network. This is not
+homepage or geographic acceptance. macOS system sleep caused two anomalous regression timeouts;
+unchanged tests passed in about 24 seconds with a command-scoped `caffeinate -is` assertion.
 
 ### Task 10: Settings v2 and Truthful User Controls
 
