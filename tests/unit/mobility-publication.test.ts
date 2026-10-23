@@ -132,6 +132,30 @@ describe('atomic audited mobility publication', () => {
       expect(await readFile(join(root, first.cells[0].resource!.uri))).toEqual(resource);
     });
 
+  it('retains the active publication when acquisition continues beyond a failed source cell', async () => {
+    const first = await buildMobility(options), before = await readFile(outputManifest);
+    const resource = await readFile(join(root, first.cells[0].resource!.uri));
+    await json(join(options.baseDir, data.base.dataset, 'boundary.json'), {
+      type: 'FeatureCollection', features: [
+        { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [[
+          [0.006, 0.006], [0.054, 0.006], [0.054, 0.014], [0.006, 0.014], [0.006, 0.006],
+        ]] } },
+      ],
+    });
+    const unavailable = () => new Response('unavailable', { status: 503 });
+    const source = () => new Response(JSON.stringify(data.source));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(source())
+      .mockResolvedValueOnce(unavailable()).mockResolvedValueOnce(unavailable())
+      .mockResolvedValueOnce(unavailable()).mockImplementation(source));
+    await expect(fetchMobility({ ...options, refresh: true, continueOnError: true }))
+      .rejects.toThrow(/incomplete.*1.*3/i);
+    expect((await load(join(options.cacheDir, 'progress.json'))).cells.map((cell: { status: string }) => cell.status))
+      .toEqual(['complete', 'failed', 'complete']);
+    await expect(buildMobility(options)).rejects.toThrow(/incomplete source cell/i);
+    expect(await readFile(outputManifest)).toEqual(before);
+    expect(await readFile(join(root, first.cells[0].resource!.uri))).toEqual(resource);
+  });
+
   it('rebuilds a corrupt intermediate cell record instead of publishing its unvalidated network', async () => {
     const first = await buildMobility(options);
     const path = join(options.cacheDir, 'compiled', (await readdir(join(options.cacheDir, 'compiled')))[0]);

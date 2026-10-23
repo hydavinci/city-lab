@@ -127,6 +127,39 @@ describe('resumable citywide road acquisition', () => {
     expect((await progress()).cells.every((c: { status: string }) => c.status === 'complete')).toBe(true);
   });
 
+  it('collects later cells after an exhausted failure but still rejects the incomplete acquisition', async () => {
+    shape = boundary(rectangle(0.001, 0.001, 0.059, 0.019));
+    await writeFile(join(baseDir, base.dataset, 'boundary.json'), JSON.stringify(shape));
+    const unavailable = () => new Response('unavailable', { status: 503 });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(response())
+      .mockResolvedValueOnce(unavailable()).mockResolvedValueOnce(unavailable())
+      .mockResolvedValueOnce(unavailable()).mockImplementation(response));
+    await expect(fetchMobility({ baseDir, cacheDir, refresh: false, continueOnError: true }))
+      .rejects.toThrow(/incomplete.*1.*3/i);
+    const cells = (await progress()).cells;
+    expect(cells.map((cell: { status: string }) => cell.status)).toEqual(['complete', 'failed', 'complete']);
+    expect(cells[1]).toMatchObject({ error: expect.stringContaining('503') });
+    expect(cells[1].resource).toBeUndefined();
+    expect(await cached()).toEqual(['cell-0_0.json', 'cell-2_0.json']);
+  });
+
+  it('resumes only missing cells after an error-isolated pass without rewriting verified successes', async () => {
+    shape = boundary(rectangle(0.001, 0.001, 0.059, 0.019));
+    await writeFile(join(baseDir, base.dataset, 'boundary.json'), JSON.stringify(shape));
+    const unavailable = () => new Response('unavailable', { status: 503 });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(response())
+      .mockResolvedValueOnce(unavailable()).mockResolvedValueOnce(unavailable())
+      .mockResolvedValueOnce(unavailable()).mockImplementation(response));
+    await expect(fetchMobility({ baseDir, cacheDir, refresh: false, continueOnError: true })).rejects.toThrow();
+    const files = await cached(), before = await Promise.all(files.map(file => readFile(join(cacheDir, file))));
+    const fetch = vi.fn(response); vi.stubGlobal('fetch', fetch);
+    await fetchMobility({ baseDir, cacheDir, refresh: false, continueOnError: true });
+    expect((await progress()).cells.map((cell: { status: string }) => cell.status)).toEqual(['complete', 'complete', 'complete']);
+    expect(await cached()).toEqual(['cell-0_0.json', 'cell-1_0.json', 'cell-2_0.json']);
+    expect(await Promise.all(files.map(file => readFile(join(cacheDir, file))))).toEqual(before);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it.each(['base', 'boundary', 'endpoint', 'query', 'hash', 'source'])(
     'does not reuse a cache with changed %s identity', async change => {
       vi.stubGlobal('fetch', response); await run();

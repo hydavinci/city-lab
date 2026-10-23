@@ -154,8 +154,8 @@ export async function readMobilitySources({ baseDir, cacheDir }: { baseDir: stri
   return { ...inputs, report, entries, inventoryHash: hash(inventory) };
 }
 
-export async function fetchMobility({ baseDir, cacheDir, refresh }: {
-  baseDir: string; cacheDir: string; refresh: boolean;
+export async function fetchMobility({ baseDir, cacheDir, refresh, continueOnError = false }: {
+  baseDir: string; cacheDir: string; refresh: boolean; continueOnError?: boolean;
 }): Promise<void> {
   const { base, baseText, boundaryText, planned, snapshot } = await baseInputs(baseDir);
   const endpoint = process.env.OVERPASS_ENDPOINT ?? 'https://overpass.private.coffee/api/interpreter';
@@ -214,7 +214,10 @@ export async function fetchMobility({ baseDir, cacheDir, refresh }: {
           if (attempt === 3) {
             cell.status = 'failed'; cell.error = error instanceof Error ? error.message : String(error);
             await atomic(progressPath, progress);
-            throw new Error(`Mobility acquisition failed at ${cell.id}: ${cell.error}`, { cause: error });
+            const failure = new Error(`Mobility acquisition failed at ${cell.id}: ${cell.error}`, { cause: error });
+            if (!continueOnError) throw failure;
+            console.error(failure.message);
+            break;
           }
           console.warn(`Mobility ${cell.id} retry after ${attempt * 15}s:`, error);
           await setTimeout(attempt * 15_000);
@@ -222,23 +225,28 @@ export async function fetchMobility({ baseDir, cacheDir, refresh }: {
       }
       if (index + 1 < progress.cells.length) await setTimeout(2000);
     }
+    if (!cache && continueOnError && cell.status === 'failed') continue;
     check(cache, `Missing completed source for ${cell.id}`);
     for (const element of cache.response.elements) seen.set(`${element.type}/${element.id}`, sourceHash(element));
     const text = await readFile(fullPath, 'utf8');
     cell.status = 'complete'; cell.resource = { path, bytes: Buffer.byteLength(text), sha256: hash(text) };
     await atomic(progressPath, progress);
   }
+  const failed = progress.cells.filter(cell => cell.status === 'failed').length;
+  check(!failed, `Incomplete citywide acquisition: ${failed}/${progress.cells.length} cells failed; see ${progressPath}`);
   console.log(`Complete citywide acquisition: ${progress.cells.length} cells, ${seen.size} unique source elements.`);
 }
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  check(args.every(arg => arg === '--refresh' || arg.startsWith('--base-dir=') || arg.startsWith('--cache-dir=')),
-    'Usage: data:mobility:fetch [--refresh] [--base-dir=path] [--cache-dir=path]');
+  check(args.every(arg => arg === '--refresh' || arg === '--continue-on-error'
+    || arg.startsWith('--base-dir=') || arg.startsWith('--cache-dir=')),
+    'Usage: data:mobility:fetch [--refresh] [--continue-on-error] [--base-dir=path] [--cache-dir=path]');
   await fetchMobility({
     baseDir: args.find(arg => arg.startsWith('--base-dir='))?.slice('--base-dir='.length) ?? 'public/data',
     cacheDir: args.find(arg => arg.startsWith('--cache-dir='))?.slice('--cache-dir='.length) ?? 'data/raw/mobility',
     refresh: args.includes('--refresh'),
+    continueOnError: args.includes('--continue-on-error'),
   });
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
