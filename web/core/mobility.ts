@@ -44,6 +44,7 @@ export interface MobilityResources {
   reason?: 'roads-hidden' | 'user' | 'page-hidden' | 'overview' | 'export';
   vehicles: number; pedestrians: number; cells: number; models: number;
   urls: number; pending: number; time: number; failure?: string;
+  draining?: boolean;
 }
 
 export function roadSegmentId(sourceId: string, a: XY, b: XY): string {

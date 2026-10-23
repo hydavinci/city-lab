@@ -13,6 +13,7 @@ import { colorMaterial } from './materials';
 import { OrbitControls } from './OrbitControls';
 import { DetailLayer } from './DetailLayer';
 import { CityArchitectureLayer } from './CityArchitectureLayer';
+import { MobilityLayer } from './MobilityLayer';
 
 export type PlaceGroup = 'district' | 'attraction';
 
@@ -73,6 +74,7 @@ export class CityScene {
   private labels: LabelCollection;
   private detail: DetailLayer;
   private cityArchitecture: CityArchitectureLayer;
+  private mobility: MobilityLayer;
   private handler: ScreenSpaceEventHandler;
   private orbit: OrbitControls;
   private disposed = false;
@@ -139,6 +141,7 @@ export class CityScene {
     }
     this.detail = new DetailLayer(this.viewer, callbacks.onError);
     this.cityArchitecture = new CityArchitectureLayer(this.viewer, callbacks.onError);
+    this.mobility = new MobilityLayer(this.viewer, () => this.report(), ids => this.detail.setReplacedRoads(ids));
     this.handler = new ScreenSpaceEventHandler(scene.canvas);
     this.handler.setInputAction((event: { position: Cartesian2 }) => {
       const picked: unknown = scene.pick(event.position);
@@ -159,6 +162,12 @@ export class CityScene {
     }, ScreenSpaceEventType.LEFT_CLICK);
     this.removeMoveListener = this.viewer.camera.moveEnd.addEventListener(() => this.scheduleTiles());
     this.removeErrorListener = scene.renderError.addEventListener((_scene: unknown, error: Error) => {
+      if (error === this.mobility.error) {
+        queueMicrotask(() => {
+          if (!this.disposed) { this.viewer.useDefaultRenderLoop = true; this.report(); }
+        });
+        return;
+      }
       if (!this.renderFailure || this.renderFailure === this.detail.error
         || this.renderFailure === this.cityArchitecture.error) this.renderFailure = error;
       if (this.renderFailure !== this.detail.error && this.renderFailure !== this.cityArchitecture.error) {
@@ -166,7 +175,7 @@ export class CityScene {
       }
     });
     this.readyTimer = setInterval(() => {
-      if (!this.surfacesReady()) scene.requestRender();
+      if (!this.surfacesReady(true, false)) scene.requestRender();
       this.report();
     }, 200);
     this.orbit = new OrbitControls(this.viewer);
@@ -178,6 +187,7 @@ export class CityScene {
   async initialize() {
     const path = `/data/${this.manifest.dataset}`;
     const architecture = this.cityArchitecture.load(this.manifest.dataset, this.manifest.counts.buildings);
+    const activity = this.loadMobility();
     const [boundary, surface] = await Promise.all([
       fetchJSON<FeatureCollection>(`${path}/boundary.json`, this.surfaceAbort.signal),
       fetchJSON<FeatureCollection>(`${path}/surface.json`, this.surfaceAbort.signal),
@@ -187,8 +197,21 @@ export class CityScene {
     this.addSurface(surface);
     this.viewer.scene.requestRender();
     await this.waitForGeometry(false);
-    await Promise.all([this.loadDistrict(), architecture]);
+    await Promise.all([this.loadDistrict(), architecture, activity]);
     this.scheduleTiles();
+  }
+
+  private async loadMobility(): Promise<void> {
+    try { await this.mobility.load(this.manifest.dataset); }
+    catch (error) {
+      if (!this.disposed && error !== this.mobility.error) this.callbacks.onError(`模拟活动初始化失败：${String(error)}`);
+    }
+    if (!this.disposed) this.report();
+  }
+
+  async retryMobility(): Promise<void> {
+    if (this.disposed) return;
+    await this.loadMobility();
   }
 
   private async loadDistrict(): Promise<void> {
@@ -205,8 +228,10 @@ export class CityScene {
     }
   }
 
-  private surfacesReady(includeBuildings = true): boolean {
-    return this.detail.ready && (!includeBuildings || this.cityArchitecture.ready) && Object.values(this.layers).every((layer) => {
+  private surfacesReady(includeBuildings = true, includeMobility = true): boolean {
+    return this.detail.ready && (!includeBuildings || this.cityArchitecture.ready)
+      && (!includeBuildings || !includeMobility || !this.mobility.required || this.mobility.ready)
+      && Object.values(this.layers).every((layer) => {
       if (!layer.show) return true;
       for (let i = 0; i < layer.length; i++) {
         if (!(layer.get(i) as Primitive).ready) return false;
@@ -218,7 +243,7 @@ export class CityScene {
   private waitForGeometry(includeBuildings: boolean): Promise<void> {
     const signal = this.surfaceAbort.signal;
     const start = performance.now();
-    let lastProgress = start, progress = this.cityArchitecture.progress;
+    let lastProgress = start, progress = this.cityArchitecture.progress + this.mobility.progress;
     return new Promise((resolve, reject) => {
       let timer: ReturnType<typeof setTimeout> | undefined;
       const finish = (error?: Error) => {
@@ -233,9 +258,10 @@ export class CityScene {
         if (this.renderFailure) return finish(this.renderFailure);
         if (this.detail.error) return finish(this.detail.error);
         if (includeBuildings && this.cityArchitecture.error) return finish(this.cityArchitecture.error);
+        if (includeBuildings && this.mobility.required && this.mobility.error) return finish(this.mobility.error);
         const now = performance.now();
-        if (progress !== this.cityArchitecture.progress) {
-          progress = this.cityArchitecture.progress;
+        if (progress !== this.cityArchitecture.progress + this.mobility.progress) {
+          progress = this.cityArchitecture.progress + this.mobility.progress;
           lastProgress = now;
         }
         if (now - lastProgress > 60_000 || now - start > 600_000) return finish(new Error('几何资源准备超时，请降低画质或刷新重试。'));
@@ -360,6 +386,7 @@ export class CityScene {
     this.labels.show = settings.labels;
     this.detail.update(settings);
     this.cityArchitecture.update(settings);
+    this.mobility.update(settings);
     this.scheduleTiles();
     scene.requestRender();
   }
@@ -374,6 +401,7 @@ export class CityScene {
     if (this.disposed) return;
     const viewer = this.viewer;
     this.detail.update(this.settings);
+    this.mobility.update(this.settings);
     const altitude = viewer.camera.positionCartographic.height;
     this.overview = altitude > 24000;
     this.report();
@@ -385,9 +413,10 @@ export class CityScene {
     const stats: SceneStats = {
       loadedTiles: resources.visibleTiles,
       loadedBuildings: resources.visibleBuildings,
-      loading: !this.surfacesReady(), overview: this.overview,
+      loading: !this.surfacesReady(true, false), overview: this.overview,
       height: position.height,
       longitude: CesiumMath.toDegrees(position.longitude), latitude: CesiumMath.toDegrees(position.latitude),
+      mobility: this.mobility.resources(),
     };
     const key = JSON.stringify(stats);
     if (key !== this.lastReport) {
@@ -450,16 +479,33 @@ export class CityScene {
   async screenshot(): Promise<Blob> {
     if (this.disposed) throw new Error('场景已关闭。');
     if (this.renderFailure) throw this.renderFailure;
-    this.updateTiles();
-    await this.waitForGeometry(true);
-    if (this.disposed) throw new Error('场景已关闭。');
-    this.viewer.render();
+    const release = this.mobility.freeze();
+    try {
+      this.updateTiles();
+      await this.waitForGeometry(true);
+      if (this.disposed) throw new Error('场景已关闭。');
+      this.viewer.render();
+      return await this.captureCanvas();
+    } finally { release(); }
+  }
+
+  private captureCanvas(): Promise<Blob> {
     return new Promise((resolve, reject) => {
-      this.viewer.canvas.toBlob((blob) => {
-        if (this.disposed) reject(new Error('场景已关闭。'));
+      const signal = this.surfaceAbort.signal;
+      const finish = (blob?: Blob, error?: unknown) => {
+        clearTimeout(timer); signal.removeEventListener('abort', cancel);
+        if (error) reject(error);
+        else if (this.disposed) reject(new Error('场景已关闭。'));
         else if (blob) resolve(blob);
         else reject(new Error('截图生成失败。'));
-      }, 'image/png');
+      };
+      const cancel = () => finish(undefined, new Error('场景已关闭。'));
+      const timer = setTimeout(() => finish(undefined, new Error('截图编码超时。')), 15000);
+      signal.addEventListener('abort', cancel, { once: true });
+      if (signal.aborted) { cancel(); return; }
+      try {
+        this.viewer.canvas.toBlob(blob => finish(blob ?? undefined), 'image/png');
+      } catch (error) { finish(undefined, error); }
     });
   }
 
@@ -474,6 +520,7 @@ export class CityScene {
     this.handler.destroy();
     this.orbit.destroy();
     this.cityArchitecture.destroy();
+    this.mobility.destroy();
     this.detail.destroy();
     this.viewer.destroy();
   }

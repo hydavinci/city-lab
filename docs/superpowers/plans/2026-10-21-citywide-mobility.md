@@ -11,6 +11,7 @@
 **Spec:** `docs/superpowers/specs/2026-10-21-citywide-mobility-design.md`
 
 **Execution status (2026-10-22):** Tasks 1–10 implemented on `feat/citywide-mobility`.
+Task 11 runtime integration is implemented; the published-real-cell homepage test remains blocked.
 The actual municipality intersects 2,232 acquisition cells. Public-service probes timed out or
 returned HTTP 406; no full-city sources or mobility release have been published. The user approved
 continuing compiler, simulation and UI implementation while leaving publication/data acceptance incomplete.
@@ -580,12 +581,12 @@ correct initialization/retry/settings/destruction and frozen screenshot output.
 - [ ] Write a failing homepage test using published real cells: load `/`, navigate through existing
   controls to a verified area, wait for activity readiness and assert actor positions change between
   observations. A fixture may expose a test-only observer via injected module, not a production global.
-- [ ] Integrate MobilityLayer beside city architecture/detail, with scoped errors and bounded
+- [x] Integrate MobilityLayer beside city architecture/detail, with scoped errors and bounded
   initialization. Forward settings/camera changes; call destroy before Viewer destruction.
   Keep base city usable if mobility fails and show a dedicated retryable activity error.
-- [ ] Add current activity progress to required-view readiness and idle timeout tracking; separate
+- [x] Add current activity progress to required-view readiness and idle timeout tracking; separate
   failure domains so a mobility retry does not clear building tiles or the static district package.
-- [ ] Freeze screenshot snapshots before waiting, then always restore in `finally`, including
+- [x] Freeze screenshot snapshots before waiting, then always restore in `finally`, including
   failed `toBlob`, timeout, nested capture and user-paused cases:
 
 ```ts
@@ -602,11 +603,27 @@ try {
 
   `captureCanvas(): Promise<Blob>` is a private extraction of the existing screenshot `toBlob` logic;
   it rejects disposed scene/null blob exactly as before. No placeholder implementation.
-- [ ] Test page visibility, roads=false, separate actor toggles, export during motion,
+- [x] Test page visibility, roads=false, separate actor toggles, export during motion,
   export failure, retry, movement across neighbouring chunks and rapid region switching.
   Assert base architecture remains visible and render errors remain explicit.
-- [ ] Run new browser test, relevant roaming/settings/recovery tests and type-check; commit
+- [x] Run new browser test, relevant roaming/settings/recovery tests and type-check; commit
   `feat: integrate citywide mobility into the production scene lifecycle`.
+
+**Task 11 evidence boundary:** Homepage integration uses an explicitly injected synthetic network
+with actual authored models; pure-world/layer tests cover page visibility, seams and lifecycle.
+It is not the published-real-cell test above. Quality downgrades preserve visible actors while
+admissions and new models obey the reduced budget; the UI reports safe density draining.
+The existing full-municipality screenshot test exceeds its unchanged 90-second limit both here
+and in an isolated `fc0cab5` baseline, waiting for download while native architecture is loading.
+Do not count that test or actual geographic activity acceptance as passed.
+
+**Integration validation:** 630 unit tests, TypeScript, and 22 targeted browser tests passed;
+the known full-municipality screenshot case was excluded from that targeted run, not changed.
+The production build completed with existing local assets. Production Cesium asset checks passed;
+the production UI smoke test initially exceeded its 30-second cold-readiness assertion, with
+1,280 successful GLB responses and no failed requests in the trace, then passed unchanged on rerun.
+This does not establish a reliable cold-start latency bound. The local build copied approximately
+42 GB of historical resources; its temporary `dist/` was cleaned after preview validation.
 
 ### Task 12: Actual Citywide Preparation, Independent Audit and Acceptance
 

@@ -62,6 +62,7 @@ export class MobilityLayer {
   private frozen?: WorldSnapshot;
   private models = new Map<number, { model: Model; animated: boolean; deadline: number }>();
   private modelPending = new Map<number, number>();
+  private nativeDecodes = new Map<Promise<Model>, { id: number; epoch: number }>();
   private modelEpoch = 0;
   private poses = new Map<number, MobileActor>();
   private urls = new Map<ActorKind, Promise<string>>();
@@ -92,6 +93,7 @@ export class MobilityLayer {
   }
   get error(): Error | undefined { return this.failure; }
   get progress(): number { return this.completed; }
+  get required(): boolean { return this.active && this.coverage; }
   get ready(): boolean {
     const state = this.resources().state;
     if (this.active && (this.loading || this.pending.size || this.preparing || this.dirty
@@ -134,6 +136,14 @@ export class MobilityLayer {
     this.appearance.material.uniforms.color = Color.fromCssColorString(settings.night ? '#454d4e' : '#70756e');
     const view = this.view();
     this.active = Boolean(settings.roads && view);
+    if (view && !this.freezes && !settings.mobilityPaused) {
+      const gate = this.gate();
+      this.world.retireOutside({ ...gate, canRetire: (cell, point, kind) => {
+        const chunk = this.cells.get(cell)?.chunk;
+        return Boolean(chunk && gate.canRetire(cell, point, kind)
+          && distance(project(unproject(point, chunk.network.origin), view.centre), [0, 0]) > 1500);
+      } });
+    }
     const retained = this.world.retainedCells(), wanted = new Set(retained);
     this.pins = [...retained].sort().join(';');
     this.coverage = false;
@@ -156,7 +166,9 @@ export class MobilityLayer {
       this.cells.delete(id); this.markDirty();
     }
     const budget = mobilityBudget(settings.quality);
-    this.world.setOptions({ seed: 7, ...budget, arrivals: this.active && retained.size < limits[settings.quality] });
+    this.world.setOptions({ seed: 7, vehicles: settings.vehicles ? budget.vehicles : 0,
+      pedestrians: settings.pedestrians ? budget.pedestrians : 0,
+      arrivals: this.active && retained.size < limits[settings.quality] });
     if (!this.active || this.failure) this.hide();
     else {
       if (this.batch) this.batch.primitive.show = true;
@@ -184,12 +196,16 @@ export class MobilityLayer {
     else if (this.pending.size || this.preparing || this.dirty || [...this.wanted].some(id =>
       !this.cells.get(id)?.registered) || this.modelPending.size || [...this.models.values()].some(record => !record.model.ready)) state = 'loading';
     else if (this.freezes) { state = 'paused'; reason = 'export'; }
+    else if (this.settings?.mobilityPaused) { state = 'paused'; reason = 'user'; }
     else if (typeof document !== 'undefined' && document.hidden) { state = 'paused'; reason = 'page-hidden'; }
-    const actors = snapshot.actors;
+    else if (!this.settings?.vehicles && !this.settings?.pedestrians) state = 'inactive';
+    const actors = snapshot.actors.filter(actor => this.enabled(actor.kind));
+    const vehicles = actors.filter(actor => !actor.kind.startsWith('person-')).length;
+    const pedestrians = actors.length - vehicles;
+    const budget = mobilityBudget(this.settings?.quality ?? 'medium');
     return { state, ...(reason ? { reason } : {}), cells: this.disposed ? 0 : this.cells.size,
-      vehicles: actors.filter(actor => !actor.kind.startsWith('person-')).length,
-      pedestrians: actors.filter(actor => actor.kind.startsWith('person-')).length,
-      models: this.models.size, urls: this.blobs.size, pending: this.disposed ? 0 : this.inFlight.size + this.modelPending.size, time: snapshot.time,
+      vehicles, pedestrians, ...(vehicles > budget.vehicles || pedestrians > budget.pedestrians ? { draining: true } : {}),
+      models: this.models.size, urls: this.blobs.size, pending: this.inFlight.size + this.pendingModelCount(), time: snapshot.time,
       ...(this.failure ? { failure: this.failure.message } : {}) };
   }
 
@@ -247,7 +263,7 @@ export class MobilityLayer {
       this.pending.set(id, controller);
       void this.read(`/${cell.resource!.uri}`, AbortSignal.any([controller.signal, this.controller.signal]), cell.resource)
         .then(value => {
-          if (this.disposed || generation !== this.generation || controller.signal.aborted || !this.wanted.has(id)) return;
+          if (this.disposed || this.failure || generation !== this.generation || controller.signal.aborted || !this.wanted.has(id)) return;
           this.cells.set(id, { chunk: parseMobilityChunk(value, cell), registered: false }); this.markDirty();
         }).catch(error => {
           if (this.disposed || generation !== this.generation || controller.signal.aborted || !this.wanted.has(id)) return;
@@ -262,7 +278,7 @@ export class MobilityLayer {
     if (this.dirty) return;
     this.dirty = true;
     queueMicrotask(() => {
-      if (this.disposed || !this.dirty) return;
+      if (this.disposed || this.failure || !this.dirty) return;
       this.dirty = false;
       try { this.rebuild(); } catch (error) { this.fail(error); }
     });
@@ -329,6 +345,7 @@ export class MobilityLayer {
   private fail(value: unknown): void {
     if (this.failure || this.disposed) return;
     this.failure = value instanceof Error ? value : new Error(String(value));
+    this.pending.forEach(controller => controller.abort()); this.dirty = false;
     this.stopClock();
     queueMicrotask(() => { if (!this.disposed) { this.hide(); this.clearModels(); } });
     this.onError(`模拟活动加载失败：${this.failure.message}。基础城市仍可浏览，可重试。`);
@@ -347,7 +364,15 @@ export class MobilityLayer {
 
   private paused(): boolean {
     return this.disposed || !this.active || Boolean(this.failure) || !this.batch || this.freezes > 0
+      || Boolean(this.settings?.mobilityPaused) || !this.settings?.vehicles && !this.settings?.pedestrians
       || typeof document !== 'undefined' && document.hidden;
+  }
+  private enabled(kind: ActorKind): boolean {
+    return Boolean(kind.startsWith('person-') ? this.settings?.pedestrians : this.settings?.vehicles);
+  }
+  private pendingModelCount(): number {
+    return this.modelPending.size + [...this.nativeDecodes.values()]
+      .filter(record => this.modelPending.get(record.id) !== record.epoch).length;
   }
   private gate() {
     const view = this.view();
@@ -407,7 +432,8 @@ export class MobilityLayer {
     const view = this.view();
     const nearby = snapshot.actors.filter(actor => {
       const chunk = this.cells.get(actor.cell)?.chunk;
-      return view && chunk && distance(project(unproject(actor.position, chunk.network.origin), view.centre), [0, 0]) <= 1500;
+      return this.enabled(actor.kind) && view && chunk
+        && distance(project(unproject(actor.position, chunk.network.origin), view.centre), [0, 0]) <= 1500;
     });
     this.poses = new Map(nearby.map(actor => [actor.id, actor]));
     for (const [id, record] of this.models) if (!this.poses.has(id)) {
@@ -416,7 +442,11 @@ export class MobilityLayer {
     for (const actor of nearby) {
       const record = this.models.get(actor.id);
       if (!record) {
-        if (!this.modelPending.has(actor.id)) void this.loadModel(actor);
+        const walk = actor.kind.startsWith('person-'), budget = mobilityBudget(this.settings!.quality);
+        const instances = [...this.models.keys(), ...this.modelPending.keys()]
+          .filter(id => this.poses.get(id)?.kind.startsWith('person-') === walk).length;
+        if (!this.modelPending.has(actor.id) && this.pendingModelCount() < 4
+          && instances < (walk ? budget.pedestrians : budget.vehicles)) void this.loadModel(actor);
         continue;
       }
       record.model.modelMatrix = this.matrix(actor);
@@ -473,6 +503,12 @@ export class MobilityLayer {
         }
         return model;
       });
+      this.nativeDecodes.set(pending, { id: actor.id, epoch });
+      const settled = () => {
+        this.nativeDecodes.delete(pending);
+        if (!this.disposed) this.viewer.scene.requestRender();
+      };
+      void pending.then(settled, settled);
       const model = await Promise.race([pending, new Promise<never>((_resolve, reject) => {
         timer = setTimeout(() => { expired = true; reject(new Error(`Activity model decode timed out: ${actor.kind}`)); }, 15000);
         const abort = () => { expired = true; reject(new DOMException('Obsolete activity model', 'AbortError')); };

@@ -288,10 +288,43 @@ describe('bounded nearby mobility loading', () => {
     world.step({ ...outsideGate, canRetire: () => false });
     const before = world.snapshot().actors[0];
     expect(before).toBeDefined();
-    fixture.move(2); await fixture.settle();
-    expect(fixture.layer.resources().cells).toBe(2);
+    fixture.focus.lng += 0.0002;
+    fixture.layer.update({ ...defaultSettings }); await fixture.settle();
+    expect(fixture.layer.resources().cells).toBe(1);
     expect(world.snapshot().actors[0]).toEqual(before);
     expect(world.retainedCells().has(before.cell)).toBe(true);
+  });
+  it('releases off-window unreserved actors on a distant jump rather than pinning an abandoned window forever', async () => {
+    const fixture = setup([mobilityFixture().chunk, remoteChunk(2)]);
+    await fixture.layer.load('0123456789abcdef'); await fixture.settle();
+    const world: MobilityWorld = Reflect.get(fixture.layer, 'world');
+    world.step(outsideGate);
+    expect(world.snapshot().actors.length).toBeGreaterThan(0);
+    fixture.move(2); await fixture.settle();
+    expect(world.snapshot().actors).toEqual([]);
+    expect(fixture.layer.resources().cells).toBe(1);
+  });
+  it('suspends timers while the page is hidden and resumes without accumulated catch-up', async () => {
+    const document = Object.assign(new EventTarget(), { hidden: false });
+    vi.stubGlobal('document', document);
+    const fixture = setup();
+    await fixture.layer.load('0123456789abcdef'); await fixture.settle();
+    fixture.layer.update({ ...defaultSettings, mobilityPaused: true });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
+      setTimeout(() => callback(performance.now()), 16));
+    vi.stubGlobal('cancelAnimationFrame', (id: ReturnType<typeof setTimeout>) => clearTimeout(id));
+    fixture.layer.update({ ...defaultSettings });
+    await vi.advanceTimersByTimeAsync(150);
+    const before = fixture.layer.resources().time;
+    expect(before).toBeGreaterThan(0);
+    document.hidden = true; document.dispatchEvent(new globalThis.Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(fixture.layer.resources()).toMatchObject({ time: before, reason: 'page-hidden' });
+    expect(vi.getTimerCount()).toBe(0);
+    document.hidden = false; document.dispatchEvent(new globalThis.Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(50);
+    expect(fixture.layer.resources().time).toBeCloseTo(before + 0.05);
   });
 
   it('uses nested idempotent export freezes without altering the saved user settings', async () => {
@@ -304,6 +337,33 @@ describe('bounded nearby mobility loading', () => {
     second();
     expect(fixture.layer.resources().state).toBe('ready');
     expect(defaultSettings).toEqual(before);
+  });
+  it('keeps manual pause independent of export leases and hides a disabled actor kind', async () => {
+    const fixture = setup();
+    await fixture.layer.load('0123456789abcdef'); await fixture.settle();
+    const world: MobilityWorld = Reflect.get(fixture.layer, 'world');
+    world.step(outsideGate); fixture.frame();
+    await vi.waitFor(() => expect(fixture.layer.resources().models).toBe(2));
+    fixture.layer.update({ ...defaultSettings, mobilityPaused: true, vehicles: false });
+    const release = fixture.layer.freeze(); release();
+    expect(fixture.layer.resources()).toMatchObject({ state: 'paused', reason: 'user', vehicles: 0, pedestrians: 1, models: 1 });
+  });
+  it('reports a safe density transition rather than removing visible actors on a quality downgrade', async () => {
+    const chunk = mobilityFixture().chunk, edge = chunk.network.edges.find(edge => edge.id === 'w')!;
+    edge.points = [[40, -100], [40, 100]]; edge.length = 200;
+    edge.corridor = [[[[39, -100], [41, -100], [41, 100], [39, 100], [39, -100]]]];
+    chunk.network.zones = []; chunk.zoneIds = {};
+    chunk.network.edges.forEach(edge => { edge.conflicts = []; });
+    const fixture = setup([chunk]);
+    await fixture.layer.load('0123456789abcdef'); await fixture.settle();
+    const world: MobilityWorld = Reflect.get(fixture.layer, 'world');
+    world.setOptions({ seed: 7, vehicles: 0, pedestrians: 90, arrivals: true });
+    for (let i = 0; i < 2400; i++) world.step({ ...outsideGate, canRetire: () => false });
+    const count = world.snapshot().actors.length;
+    expect(count).toBeGreaterThan(36);
+    fixture.layer.update({ ...defaultSettings, quality: 'low', mobilityPaused: true });
+    expect(fixture.layer.resources()).toMatchObject({ draining: true, pedestrians: count });
+    expect(world.snapshot().actors.length).toBe(count);
   });
 
   it('destroys a late native model instead of re-registering it after the layer is destroyed', async () => {
@@ -325,6 +385,45 @@ describe('bounded nearby mobility loading', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(model.isDestroyed()).toBe(true);
     expect(fixture.layer.resources()).toMatchObject({ models: 0, urls: 0, cells: 0, pending: 0 });
+  });
+  it('bounds unresolved native decoders across repeated roads toggles and keeps obsolete work accounted', async () => {
+    const fixture = setup();
+    await fixture.layer.load('0123456789abcdef'); await fixture.settle();
+    const world: MobilityWorld = Reflect.get(fixture.layer, 'world');
+    world.step(outsideGate);
+    const native = Model.fromGltfAsync.bind(Model);
+    const decoders: { resolve(model: Model): void; options: Parameters<typeof Model.fromGltfAsync>[0] }[] = [];
+    vi.spyOn(Model, 'fromGltfAsync').mockImplementation(options =>
+      new Promise(resolve => decoders.push({ resolve, options })));
+    for (let i = 0; i < 8; i++) {
+      fixture.layer.update({ ...defaultSettings }); fixture.frame();
+      await new Promise<void>(done => setTimeout(done, 5));
+      fixture.layer.update({ ...defaultSettings, roads: false });
+    }
+    expect(decoders.length).toBeGreaterThan(0);
+    expect(decoders.length).toBeLessThanOrEqual(4);
+    fixture.layer.destroy();
+    expect(fixture.layer.resources().pending).toBe(decoders.length);
+    for (const decoder of decoders) decoder.resolve(await native(decoder.options));
+    await new Promise<void>(done => setTimeout(done, 0));
+    expect(fixture.layer.resources().pending).toBe(0);
+    expect(rendered.models.every(model => model.destroyed)).toBe(true);
+  });
+
+  it('invalidates a sibling chunk success arriving after the active window has failed', async () => {
+    const fixture = setup(stitchChunks(Object.values(twoChunkFixture())));
+    let late!: (response: Response) => void;
+    const delayed = new Promise<Response>(resolve => { late = resolve; }), original = fixture.fetcher.getMockImplementation()!;
+    fixture.fetcher.mockImplementation((url, init) => String(url).endsWith('cell-right.json') ? delayed
+      : String(url).endsWith('cell-left.json') ? Promise.resolve(new Response('failed', { status: 503 })) : original(url, init));
+    await fixture.layer.load('0123456789abcdef');
+    await vi.waitFor(() => expect(fixture.layer.resources().state).toBe('error'));
+    const before = rendered.primitives.length;
+    late(await original(`/${fixture.manifest.cells.find(cell => cell.id === 'cell/right')!.resource!.uri}`));
+    await new Promise<void>(done => setTimeout(done, 0));
+    expect(rendered.primitives.length).toBe(before);
+    expect(fixture.layer.resources().cells).toBe(0);
+    expect(fixture.replacements.at(-1)?.size ?? 0).toBe(0);
   });
 
   it('restores static roads after a surface failure and does not re-enable failed replacements on later settings', async () => {

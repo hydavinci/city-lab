@@ -118,6 +118,17 @@ export class MobilityWorld {
     return retained;
   }
 
+  retireOutside(gate: SpawnGate): void {
+    const owners = new Set(Object.values(this.reservations.owners()));
+    for (const [id, state] of this.actors) {
+      if (owners.has(id) || !gate.canRetire(state.actor.cell, state.actor.position, state.actor.kind)) continue;
+      this.reservations.release(id); this.groups.delete(id);
+      for (const edge of state.occupied) this.occupancy.get(edge)?.delete(id);
+      this.actors.delete(id); this.dirty = true;
+    }
+    this.refreshExitStorage();
+  }
+
   setOptions(options: MobilityOptions): void {
     validateOptions(options);
     if (options.seed !== this.options.seed) this.randomState = options.seed;

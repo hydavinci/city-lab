@@ -428,6 +428,17 @@ describe('deterministic nearby mobility world', () => {
     fresh.addChunk(mobilityFixture().chunk); run(fresh, 200);
     expect(world.snapshot()).toEqual(fresh.snapshot());
   });
+  it('can retire off-window bodies without reporting terminal throughput or deleting visible actors', () => {
+    const world = new MobilityWorld(options);
+    world.addChunk(mobilityFixture().chunk); run(world, 5);
+    expect(world.snapshot().actors.length).toBeGreaterThan(0);
+    world.retireOutside({ ...outsideGate, canRetire: () => false });
+    expect(world.snapshot().actors.length).toBeGreaterThan(0);
+    world.retireOutside(outsideGate);
+    expect(world.snapshot().actors).toEqual([]);
+    expect(world.retainedCells().size).toBe(0);
+    expect(world.snapshot().passedByEntry).toEqual({});
+  });
 
   it('rejects duplicate ownership rather than producing two copies of traffic', () => {
     const world = new MobilityWorld(options), first = mobilityFixture().chunk, duplicate = mobilityFixture().chunk;

@@ -306,7 +306,12 @@ export function App() {
             <p className="section-note" data-testid="mobility-counts">
               车辆 {stats.mobility?.vehicles ?? 0} · 行人 {stats.mobility?.pedestrians ?? 0}
             </p>
+            {stats.mobility?.draining && <p className="section-note">正在安全降低活动密度；保留视野内对象，离开视野后回收。</p>}
             <p className="section-note">模拟活动，非实时交通</p>
+            {stats.mobility?.failure && <div data-testid="mobility-error" role="status" className="section-note mobility-error">
+              <p>{stats.mobility.failure}</p>
+              <button className="button subdued" onClick={() => { void scene.current?.retryMobility(); }}>重试模拟活动</button>
+            </div>}
           </section>
           <section className="panel-section">
             <div className="section-title"><span><SlidersHorizontal size={15} /> 渲染质量</span><span className="tiny-label">QUALITY</span></div>
