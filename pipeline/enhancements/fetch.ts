@@ -9,8 +9,8 @@ import type { Bounds } from '../../web/core/types';
 // Broad investigation window, not the final published district.
 const initialBounds: Bounds = [120.671, 31.308, 120.691, 31.330];
 
-export function validateSource(value: unknown): void {
-  const data = validateOverpass(value, true);
+export function validateSource(value: unknown, { allowEmpty = false }: { allowEmpty?: boolean } = {}): void {
+  const data = validateOverpass(value, !allowEmpty);
   if (!data.osm3s?.timestamp_osm_base || !Number.isFinite(Date.parse(data.osm3s.timestamp_osm_base))) {
     throw new Error('Missing/invalid OSM snapshot');
   }

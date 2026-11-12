@@ -2,12 +2,15 @@ node_modules/
 __pycache__/
 dist/
 public/architecture-city/
+public/mobility/
+public/enhancements/mobility-assets-*.json
 data/raw/
 data/enhancements/staging/
 artifacts/
 test-results/
 playwright-report/
 .DS_Store
+.superpowers/
 *.log
 .env
 .env.*

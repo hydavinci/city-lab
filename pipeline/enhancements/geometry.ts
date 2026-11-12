@@ -1,4 +1,5 @@
 import type { Polygon2, XY } from '../../web/core/enhancements';
+import type { Bounds } from '../../web/core/types';
 
 const RAD = Math.PI / 180, R = 6378137;
 export const CLEARANCE = 0.001;
@@ -42,6 +43,28 @@ export function polygonBounds(p: Polygon2): [number,number,number,number] {
 }
 export function boundsOverlap(a: number[], b: number[]): boolean {
   return a[0]<=b[2] && b[0]<=a[2] && a[1]<=b[3] && b[1]<=a[3];
+}
+export function spatialCandidates<T>(items: readonly T[], getBounds: (item: T) => Bounds): (query: Bounds) => T[] {
+  const boxes = items.map(getBounds), buckets = new Map<string, number[]>(), broad: number[] = [];
+  const range = (box: Bounds) => box.map(n => Math.floor(n / 64)) as Bounds;
+  for (const [i, box] of boxes.entries()) {
+    if (!box.every(Number.isFinite) || box[0] > box[2] || box[1] > box[3]) throw new Error('Invalid spatial bounds');
+    const [w, s, e, n] = range(box);
+    if ((e - w + 1) * (n - s + 1) > 256) { broad.push(i); continue; }
+    for (let x = w; x <= e; x++) for (let y = s; y <= n; y++) {
+      const key = `${x},${y}`, entries = buckets.get(key) ?? [];
+      entries.push(i); buckets.set(key, entries);
+    }
+  }
+  return query => {
+    if (!query.every(Number.isFinite) || query[0] > query[2] || query[1] > query[3]) throw new Error('Invalid spatial query');
+    const [w, s, e, n] = range(query), candidates = new Set(broad);
+    if ((e - w + 1) * (n - s + 1) > 4096) boxes.forEach((_, i) => candidates.add(i));
+    else for (let x = w; x <= e; x++) for (let y = s; y <= n; y++) {
+      for (const i of buckets.get(`${x},${y}`) ?? []) candidates.add(i);
+    }
+    return [...candidates].sort((a, b) => a - b).filter(i => boundsOverlap(boxes[i], query)).map(i => items[i]);
+  };
 }
 export function polygonsIntersect(a: Polygon2, b: Polygon2): boolean {
   if (!boundsOverlap(polygonBounds(a),polygonBounds(b))) return false;

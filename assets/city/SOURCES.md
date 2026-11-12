@@ -39,8 +39,10 @@ Exact declared sizes and immutable bytes are authoritative in
 `public/enhancements/manifest.json`. Static placements are inferred illustrative
 details tied to source ways/building IDs, not surveyed street furniture.
 Static dimensions above round the root-centred published envelopes upward to
-millimetres. The production city automatically loads these four static kinds;
-cars, the bus and people remain inspection assets, not simulated traffic.
+millimetres. The production city automatically loads these four static kinds.
+The citywide mobility layer reuses the five actor kinds with verified bytes,
+scale 1 and distance-driven Walk; homepage integration and real citywide data
+publication remain separate acceptance gates.
 
 ## Continuous Walk certification
 
@@ -79,5 +81,5 @@ of the frozen city clock. The private observer is version-pinned to Cesium.
 Task 3 baseline metadata/screenshots remain unchanged. Its provisional two-GLB
 slice was removed after the harness migrated to the immutable manifest. Evidence
 is in ignored `artifacts/task-5` and Playwright output, never the runtime bundle.
-This package does not implement moving actors, population scheduling or prove
-hardware frame-rate targets; those remain later tasks.
+The asset package itself does not implement population scheduling or prove
+hardware frame-rate targets; the separate mobility layer owns actor lifecycle.

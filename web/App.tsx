@@ -101,7 +101,10 @@ export function App() {
     let saved = { ...defaultSettings };
     try {
       const text = localStorage.getItem(SETTINGS_KEY);
-      if (text) saved = parseSettings(text);
+      if (text) {
+        saved = parseSettings(text);
+        localStorage.setItem(SETTINGS_KEY, encodeSettings(saved));
+      }
       latestSettings.current = saved;
       setSettings(saved);
     } catch (error) {
@@ -278,6 +281,37 @@ export function App() {
               <span><Icon size={16} className={`color-${color}`} />{name}</span>
               <button className={`switch ${settings[key] ? 'on' : ''}`} role="switch" aria-label={name} aria-checked={settings[key]} onClick={() => update(key, !settings[key])}><span /></button>
             </div>)}</div>
+          </section>
+          <section className="panel-section">
+            <div className="section-title"><span><Navigation size={15} /> 城市活动</span><span className="tiny-label">SIMULATION</span></div>
+            <div className="layer-list">{([['vehicles', '模拟车辆'], ['pedestrians', '模拟行人']] as const).map(([key, label]) =>
+              <div className="layer-row" key={key}><span>{label}</span>
+                <button className={`switch ${settings[key] ? 'on' : ''}`} role="switch" aria-label={label}
+                  aria-checked={settings[key]} onClick={() => update(key, !settings[key])}><span /></button>
+              </div>)}</div>
+            <button className="button subdued" onClick={() => update('mobilityPaused', !settings.mobilityPaused)}>
+              {settings.mobilityPaused ? '继续模拟' : '暂停模拟'}</button>
+            <p className="section-note" data-testid="mobility-state" aria-live="polite">
+              {stats.mobility?.state === 'error' ? '活动资源加载失败'
+                : !settings.roads ? '道路已隐藏，模拟暂停'
+                  : settings.mobilityPaused ? '模拟已暂停'
+                    : !settings.vehicles && !settings.pedestrians ? '模拟车辆和行人已关闭'
+                      : stats.mobility?.state === 'loading' ? '活动资源加载中'
+                        : stats.mobility?.state === 'no-coverage' ? '当前视野暂无已验证活动路网'
+                          : stats.mobility?.state === 'ready' ? '附近模拟运行中'
+                            : stats.mobility?.reason === 'page-hidden' ? '页面隐藏，模拟暂停'
+                              : stats.mobility?.reason === 'export' ? '截图冻结中'
+                                : stats.mobility?.reason === 'overview' ? '靠近街道后显示模拟活动' : '模拟活动尚未就绪'}
+            </p>
+            <p className="section-note" data-testid="mobility-counts">
+              车辆 {stats.mobility?.vehicles ?? 0} · 行人 {stats.mobility?.pedestrians ?? 0}
+            </p>
+            {stats.mobility?.draining && <p className="section-note">正在安全降低活动密度；保留视野内对象，离开视野后回收。</p>}
+            <p className="section-note">模拟活动，非实时交通</p>
+            {stats.mobility?.failure && <div data-testid="mobility-error" role="status" className="section-note mobility-error">
+              <p>{stats.mobility.failure}</p>
+              <button className="button subdued" onClick={() => { void scene.current?.retryMobility(); }}>重试模拟活动</button>
+            </div>}
           </section>
           <section className="panel-section">
             <div className="section-title"><span><SlidersHorizontal size={15} /> 渲染质量</span><span className="tiny-label">QUALITY</span></div>

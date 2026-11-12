@@ -9,6 +9,7 @@ function fixture() {
     surfaceAbort: new AbortController(), disposed: false, renderFailure: undefined,
     detail: { error: undefined }, cityArchitecture: { progress: 0, error: undefined as Error | undefined },
     surfacesReady: vi.fn(() => false), viewer: { scene: { requestRender: vi.fn() } },
+    mobility: { progress: 0, required: false, error: undefined as Error | undefined, freeze: () => () => {} },
   };
   const wait = () => Reflect.apply(Reflect.get(CityScene.prototype, 'waitForGeometry'), scene, [true]) as Promise<void>;
   return { scene, wait };
@@ -17,12 +18,43 @@ function fixture() {
 afterEach(() => vi.useRealTimers());
 
 describe('scene geometry readiness', () => {
+  it('releases screenshot freezes on encoding failure without overwriting a saved pause choice', async () => {
+    let leases = 0;
+    const scene = {
+      disposed: false, renderFailure: undefined,
+      mobility: { freeze: () => { leases++; return () => { leases--; }; } },
+      settings: { ...defaultSettings, mobilityPaused: true },
+      updateTiles: () => {}, waitForGeometry: async () => {},
+      viewer: { render: () => {} }, captureCanvas: async () => { throw new Error('png failed'); },
+    };
+    await expect(Reflect.apply(CityScene.prototype.screenshot, scene, [])).rejects.toThrow('png failed');
+    expect(leases).toBe(0);
+    expect(scene.settings.mobilityPaused).toBe(true);
+  });
+  it('cancels a pending encoder on disposal without leaking its deadline or export freeze', async () => {
+    vi.useFakeTimers();
+    let leases = 0;
+    const scene = {
+      disposed: false, surfaceAbort: new AbortController(), updateTiles: () => {}, waitForGeometry: async () => {},
+      mobility: { freeze: () => { leases++; return () => { leases--; }; } },
+      viewer: { render: () => {}, canvas: { toBlob: (_callback: BlobCallback) => {} } },
+      captureCanvas(): Promise<Blob> { return Reflect.apply(Reflect.get(CityScene.prototype, 'captureCanvas'), this, []); },
+    };
+    const pending = Reflect.apply(CityScene.prototype.screenshot, scene, []).then(() => 'png', (error: Error) => error.message);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(leases).toBe(1);
+    scene.disposed = true; scene.surfaceAbort.abort();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(leases).toBe(0);
+    expect(await pending).toBe('场景已关闭。');
+    expect(vi.getTimerCount()).toBe(0);
+  });
   it('consumes a scheduled camera update when an export updates tiles immediately', async () => {
     vi.useFakeTimers();
     const update = vi.fn(), nativeUpdate = vi.fn(), requestRender = vi.fn();
     const scene = {
       disposed: false, settings: {}, timer: undefined, report: vi.fn(),
-      detail: { update }, cityArchitecture: { update: nativeUpdate },
+      detail: { update }, cityArchitecture: { update: nativeUpdate }, mobility: { update: () => {} },
       viewer: { camera: { positionCartographic: { height: 1000 } }, scene: { requestRender } },
       updateTiles() { Reflect.apply(Reflect.get(CityScene.prototype, 'updateTiles'), this, []); },
     };
@@ -156,7 +188,12 @@ describe('scene geometry readiness', () => {
     let encoded!: BlobCallback;
     const scene = {
       disposed: false, updateTiles: vi.fn(), waitForGeometry: vi.fn().mockResolvedValue(undefined),
+      surfaceAbort: new AbortController(),
       detail: { waitUntilReady: vi.fn().mockResolvedValue(undefined) },
+      mobility: { freeze: () => () => {} },
+      captureCanvas(): Promise<Blob> {
+        return Reflect.apply(Reflect.get(CityScene.prototype, 'captureCanvas'), this, []);
+      },
       viewer: { render: vi.fn(), canvas: { toBlob: (callback: BlobCallback) => { encoded = callback; } } },
     };
     const capture = Reflect.apply(CityScene.prototype.screenshot, scene, []) as Promise<Blob>;
